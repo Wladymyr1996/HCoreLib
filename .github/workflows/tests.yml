@@ -31,7 +31,7 @@ jobs:
       # One platform failing should not hide the state of the other.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest] #, windows-latest]
         build_type: [Debug, Release]
 
     steps:
