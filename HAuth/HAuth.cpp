@@ -11,8 +11,27 @@
 #include <HConfig/HConfig.hpp>
 #include <HSha256/HSha256.hpp>
 #include <HSystemUtils/HSystemUtils.hpp>
+#include <HValue/HValue.hpp>
 
-
+/**
+ * The hash reaches the file THROUGH an HValue, whose payload is fixed at
+ * compile time - so a payload shorter than the digest truncates it on the way
+ * out, and nothing fails at the time: the full hash is still in RAM, and the
+ * password keeps verifying for the rest of that boot. It is the NEXT boot,
+ * reading the short value back and comparing it against a full-length digest,
+ * that refuses the correct password - permanently, on a device whose only way
+ * back in is a factory reset.
+ *
+ * A silent failure that only appears after a reboot, on a device that is by
+ * then in a cupboard, is the worst kind there is. So it is a build error
+ * instead, for the same reason HGpioManager validates the board table at
+ * compile time rather than at boot.
+ */
+static_assert(HVALUE_MAX_STRING_LEN >= HSHA256_HEX_BYTES - 1,
+              "HVALUE_MAX_STRING_LEN is smaller than a SHA-256 hex digest, so HAuth's "
+              "password hash would be truncated on its way into config/auth.cfg and "
+              "would stop matching after a reboot. Raise it to at least 64 in the "
+              "application's HCoreLibConfig.h.");
 
 #if IS_MCU
 #include <esp_random.h>
@@ -78,6 +97,14 @@ void HAuth::init() noexcept {
 
   if (storedHash[0] == '\0') {
     HWarning("no admin password set - the API is OPEN until one is");
+  } else if (std::strlen(storedHash) != HSHA256_HEX_BYTES - 1) {
+    // Written by a build whose HValue payload was too small to hold a whole
+    // digest - see the static_assert above. It can never match, so the device
+    // stays LOCKED rather than open, and says why here: finding out by being
+    // refused your own password tells you nothing about what to do next.
+    HCritical("stored password hash is %u characters, not %d - an older build truncated "
+              "it and it can no longer match. A factory reset is the way back in.",
+              static_cast<unsigned>(std::strlen(storedHash)), HSHA256_HEX_BYTES - 1);
   } else {
     HInfo("admin password is set");
   }

@@ -97,6 +97,26 @@ debounce state machine, the config round trip, the JSON DOM and the password
 hashing testable on a machine with no board attached — running the same code the
 device runs, not a reimplementation of it.
 
+### Tests
+
+[Tests/](Tests/) is that, done: a standalone CMake project with no dependencies of
+its own, covering every module the host build compiles — `HValue`, `HJson`,
+`HConfig` (paths, the on-disk format, patching, crash recovery), `HLog`,
+`HSha256` against the published vectors, `HTimer`, `HHookList`, `HFs`,
+`HGpioManager`, `HButton` through a synthetic bounce train, `HRtcStore` and
+`HAuth`.
+
+```
+cmake -S Tests -B build-tests
+cmake --build build-tests
+ctest --test-dir build-tests --output-on-failure
+```
+
+The same three commands run in CI on Linux and Windows, in Debug and Release —
+see [.github/workflows/tests.yml](.github/workflows/tests.yml). `HTask`,
+`HTaskManager`, `Devices/` and `Portal/` are target-only and are not built here,
+so they have no suite; the firmware repositories that consume this one cover them.
+
 ## Tools
 
 `tools/packui.py` folds a web UI's HTML, CSS and JS into one gzipped file for

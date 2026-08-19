@@ -28,6 +28,12 @@
  * so what is in it should not be the secret itself. See HSha256 on what this
  * does and does not buy.
  *
+ * It travels to that file inside an HValue, so an application that links this
+ * class must give HVALUE_MAX_STRING_LEN at least the 64 characters a hex digest
+ * takes. That is not left to be discovered: HAuth.cpp fails the build below it,
+ * because the alternative is a hash quietly truncated on the way out and a
+ * password that stops working one reboot later.
+ *
  * ## A fresh device has no password
  * Until setPassword() succeeds, isPasswordSet() is false and TWO things are
  * open: /api/setAdminPassword needs no key, and /api/auth issues a key for any

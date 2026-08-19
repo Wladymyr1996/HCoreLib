@@ -1,0 +1,60 @@
+#######################################################################
+# Host regression tests.
+#
+# Builds Tests/ and runs the suite on two compilers and both build types. The
+# second axis is not padding: HLog captures __FILE__ and __LINE__ only on a
+# desktop DEBUG build, and HCoreLib.h's IS_MCU / IS_DESKTOP split means a
+# Release host build takes a different branch through several modules - so a
+# Debug-only job would leave the code an application actually ships untested.
+#
+# There is no ESP-IDF job here. HCoreLib cannot be built for the target on its
+# own: it is a component, and the application owns the HCoreLibConfig.h and
+# HGpioConfig.h it includes by name. The target-only modules (HTask,
+# HTaskManager, Devices/, Portal/) are therefore covered by the firmware
+# repositories that consume this one, not here.
+#######################################################################
+
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host-tests:
+    name: ${{ matrix.os }} / ${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # One platform failing should not hide the state of the other.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        build_type: [Debug, Release]
+
+    steps:
+      # .gitmodules names ETL over SSH, which is right for a developer with a
+      # key and impossible for a runner without one. Rewriting the prefix lets
+      # the checkout below fetch the same public repository anonymously,
+      # without the submodule URL having to be different here than it is
+      # locally.
+      - name: Fetch GitHub submodules over HTTPS
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S Tests -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      # --output-on-failure is the whole point of the harness printing the
+      # failing expression and its line: a red job should say what broke
+      # without anybody having to reproduce it locally first.
+      - name: Test
+        run: ctest --test-dir build --build-config ${{ matrix.build_type }} --output-on-failure
