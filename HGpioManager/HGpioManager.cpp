@@ -7,6 +7,11 @@
 // the file's own documentation for the row format.
 #include <HGpioConfig.h>
 
+// Which backend this is, is decided in HGpioBackend.cpp. The platform headers
+// below are still needed here for the pad limits the board table is validated
+// against - not for the object itself.
+#include "HGpioBackend/HGpioBackend.hpp"
+
 #if IS_MCU
 
 #include <soc/soc_caps.h>
@@ -118,22 +123,6 @@ static_assert(allOutputsCanDrive(),
 static_assert(allNumbersUnique(),
               "HGpioConfig.h claims the same GPIO number twice - two names cannot own one pad");
 
-/**
- * @brief The one backend instance, chosen at compile time.
- *
- * A function-local static rather than a namespace-scope object: a pin read from
- * another translation unit's static constructor would otherwise race this
- * object's own construction, and static init order across TUs is not defined.
- */
-HIGpio& backend() noexcept {
-#if IS_MCU
-  static HGpioEsp32 gpio;
-#else
-  static HGpioDesktop gpio;
-#endif
-  return gpio;
-}
-
 /** @brief strcmp for pin names, without dragging in <cstring> for four lines. */
 bool namesEqual(const char* a, const char* b) noexcept {
   if (a == nullptr || b == nullptr) {
@@ -152,7 +141,7 @@ bool HGpioManager::configureAll() noexcept {
   bool ok = true;
 
   for (size_t i = 0; i < kPinCount; ++i) {
-    if (!backend().configure(kPins[i])) {
+    if (!hGpioBackend().configure(kPins[i])) {
       ok = false;
       continue;
     }
@@ -188,5 +177,5 @@ HGpioPin HGpioManager::at(size_t index) noexcept {
 }
 
 HIGpio& HGpioManager::instance() noexcept {
-  return backend();
+  return hGpioBackend();
 }

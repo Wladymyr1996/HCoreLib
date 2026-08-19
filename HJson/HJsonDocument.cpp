@@ -2,51 +2,25 @@
 
 #include <charconv>
 #include <cstring>
-#include <new>
 
 HJsonDocument::HJsonDocument(char* buffer, size_t capacity)
-    : buffer_(buffer), capacity_(capacity), used_(0), root_(this) {
+    : pool_(buffer, capacity), root_(&pool_) {
 }
 
+// The three below are one line each now that HJsonPool holds the allocator:
+// they stay as the document's own names because the parser reads better
+// calling allocateNode() than calling a pool it would otherwise have to name
+// on every line.
 void* HJsonDocument::allocate(size_t size) {
-  // Bump allocator: every allocation just advances a pointer, never frees
-  // individually. Round up to a universally safe alignment so any type -
-  // including HJsonValue itself, placement-constructed below - can be
-  // built at the returned address without UB on stricter architectures.
-  const size_t alignment = alignof(std::max_align_t);
-  const size_t alignedSize = (size + alignment - 1) & ~(alignment - 1);
-
-  if (used_ + alignedSize > capacity_) {
-    return nullptr;  // Out of memory: caller must handle gracefully.
-  }
-
-  void* ptr = buffer_ + used_;
-  used_ += alignedSize;
-  return ptr;
+  return pool_.allocate(size);
 }
 
 HJsonValue* HJsonDocument::allocateNode() {
-  void* mem = allocate(sizeof(HJsonValue));
-  if (mem == nullptr) {
-    return nullptr;
-  }
-  // Placement-new: constructs into pool memory this document already
-  // owns. This is not a heap allocation - it just runs HJsonValue's
-  // constructor at an address the bump allocator already reserved.
-  return new (mem) HJsonValue(this);
+  return HJsonValue::allocateIn(pool_);
 }
 
 const char* HJsonDocument::copyString(const char* text, size_t length) {
-  if (text == nullptr) {
-    return nullptr;
-  }
-  char* mem = static_cast<char*>(allocate(length + 1));
-  if (mem == nullptr) {
-    return nullptr;
-  }
-  memcpy(mem, text, length);
-  mem[length] = '\0';
-  return mem;
+  return pool_.copyString(text, length);
 }
 
 HJsonValue& HJsonDocument::getRoot() {
@@ -58,11 +32,11 @@ const HJsonValue& HJsonDocument::getRoot() const {
 }
 
 size_t HJsonDocument::usedBytes() const {
-  return used_;
+  return pool_.usedBytes();
 }
 
 size_t HJsonDocument::capacityBytes() const {
-  return capacity_;
+  return pool_.capacityBytes();
 }
 
 // ---------------- Parsing ----------------
@@ -82,8 +56,8 @@ bool HJsonDocument::parse(const char* jsonString) {
   // Reclaim the whole pool and blank the root so this document can be
   // reused for a fresh parse without leaking stale state (or dangling
   // head_/next_ pointers into the now-reused pool) from a previous one.
-  used_ = 0;
-  root_ = HJsonValue(this);
+  pool_.reset();
+  root_ = HJsonValue(&pool_);
 
   const char* p = parseValue(jsonString, &root_);
   if (p == nullptr) {

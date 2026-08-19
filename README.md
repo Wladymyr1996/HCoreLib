@@ -20,6 +20,9 @@ the logic that can be tested without hardware is tested without hardware.
 
 ## What is in it
 
+The whole of it on one page, classes and relations only, with each one marked
+boundary / control / entity: [Docs/ClassDiagram.puml](Docs/ClassDiagram.puml).
+
 ### Core — `HCoreLib` component
 
 | Module | Does |

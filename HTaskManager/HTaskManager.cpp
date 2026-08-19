@@ -12,13 +12,12 @@
 #include <HBootMode/HBootMode.hpp>
 #include <HRtcStore/HRtcStore.hpp>
 #include <HSystemUtils/HSystemUtils.hpp>
-#include <HTask/HTask.hpp>
 
 namespace {
 
 /** @brief One watched task: who, how long it may be silent, and when it last spoke. */
 struct Entry {
-  const HTask* task;
+  const HIWatchable* task;
   uint32_t timeoutMs;
   uint32_t lastAliveMs;
 };
@@ -113,7 +112,7 @@ HTaskManager& HTaskManager::instance() noexcept {
   return manager;
 }
 
-void HTaskManager::add(HTask& task, uint32_t timeoutMs) noexcept {
+void HTaskManager::add(const HIWatchable& task, uint32_t timeoutMs) noexcept {
   if (timeoutMs == 0) {
     return;  // Not watched, by its own choice. See HTask::kNoWatchdog.
   }
@@ -138,7 +137,7 @@ void HTaskManager::add(HTask& task, uint32_t timeoutMs) noexcept {
   HDebug("watching '%s' (%u ms)", task.name(), static_cast<unsigned>(timeoutMs));
 }
 
-void HTaskManager::remove(HTask& task) noexcept {
+void HTaskManager::remove(const HIWatchable& task) noexcept {
   etl::lock_guard<etl::mutex> lock(registryMutex());
   Registry& entries = registry();
 
@@ -151,7 +150,7 @@ void HTaskManager::remove(HTask& task) noexcept {
   }
 }
 
-void HTaskManager::alive(const HTask& task) noexcept {
+void HTaskManager::alive(const HIWatchable& task) noexcept {
   etl::lock_guard<etl::mutex> lock(registryMutex());
 
   for (Entry& entry : registry()) {

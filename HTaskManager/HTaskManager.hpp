@@ -5,7 +5,7 @@
 
 #include <HCoreLib.h>
 
-class HTask;
+#include "HIWatchable/HIWatchable.hpp"
 
 /** How many tasks the watchdog can watch at once. */
 #ifndef HTASKMANAGER_MAX_TASKS
@@ -29,9 +29,13 @@ class HTask;
  *
  * ## Tasks enrol themselves
  * HTask::start() registers the task if it was built with a watchdog timeout, so
- * no task can be watched and forget to enrol. HTask::sleep() reports it alive on
- * the way past, which is why an ordinary loop needs no watchdog code at all;
+ * no task can be watched and forget to enrol. HTask::sleep() reports it alive
+ * on the way past, which is why an ordinary loop needs no watchdog code at all;
  * HTask::alive() is there for a loop shaped differently.
+ *
+ * It enrols as an HIWatchable and not as an HTask, which is what keeps this
+ * class from depending on the one that already depends on it: a watchdog needs
+ * a name and an address, not a task.
  *
  * A task whose run() RETURNS is unenrolled, which matters more than it sounds:
  * a sensor task that gives up because its device is missing would otherwise stop
@@ -72,16 +76,17 @@ class HTaskManager {
 
   /**
    * @brief Registers a task. Called by HTask::start(); not by application code.
+   * @param task Identified by its ADDRESS, so it must outlive its registration.
    * @param timeoutMs Silence permitted before the device is restarted.
    *        HTask::kNoWatchdog leaves the task unwatched.
    */
-  void add(HTask& task, uint32_t timeoutMs) noexcept;
+  void add(const HIWatchable& task, uint32_t timeoutMs) noexcept;
 
   /** @brief Forgets a task, for one whose run() has returned. */
-  void remove(HTask& task) noexcept;
+  void remove(const HIWatchable& task) noexcept;
 
   /** @brief Records that a task is still working. Cheap enough for every loop. */
-  void alive(const HTask& task) noexcept;
+  void alive(const HIWatchable& task) noexcept;
 
   /** @brief How many tasks are being watched. */
   size_t watchedCount() const noexcept;
