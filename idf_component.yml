@@ -1,0 +1,9 @@
+# ESP-IDF component manifest. Read only by ESP-IDF builds; the host build
+# ignores this file entirely.
+#
+# ESP-IDF ships SPIFFS but no LittleFS, so the driver behind the HLittleFs
+# backend comes from the component registry. Declaring it here rather than in
+# App makes it a dependency of the component that actually calls it, and the
+# manager turns it into a REQUIRES of HCoreLib automatically.
+dependencies:
+  joltwallet/littlefs: "^1.16.0"

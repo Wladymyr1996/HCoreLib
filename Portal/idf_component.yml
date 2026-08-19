@@ -1,0 +1,8 @@
+# ESP-IDF component manifest for the portal.
+#
+# mDNS is what lets a phone reach a device as `<hostname>.local` instead of by
+# address - see HNetwork::startMdns(). It is a managed component rather than part
+# of IDF, and it is declared HERE rather than in the application so that a device
+# which never builds the portal never fetches it.
+dependencies:
+  espressif/mdns: "^1.2.0"
