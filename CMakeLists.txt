@@ -20,10 +20,16 @@ set(HCORELIB_SRCS
     "HFs/HFs.cpp"
     "HFs/HIFile.cpp"
     "HFs/HIFs.cpp"
+    "HGpioManager/HGpioBackend/HGpioBackend.cpp"
     "HGpioManager/HGpioManager.cpp"
     "HGpioManager/HGpioPin/HGpioPin.cpp"
     "HGpioManager/HIGpio/HIGpio.cpp"
     "HITickable/HITickable.cpp"
+    # HIWatchable is what HTaskManager watches. Its only implementer is
+    # target-only, but the interface itself is platform-independent, so it is
+    # built here as well - a file nothing on this platform includes is still a
+    # file the host compiler will tell us about.
+    "HTaskManager/HIWatchable/HIWatchable.cpp"
     "HAuth/HAuth.cpp"
     "HRtcStore/HRtcStore.cpp"
     "HSleep/HSleep.cpp"
@@ -31,6 +37,7 @@ set(HCORELIB_SRCS
     "HLog/HILogBackend/HILogBackend.cpp"
     "HLog/HConsoleLogBackend/HConsoleLogBackend.cpp"
     "HJson/HJsonDocument.cpp"
+    "HJson/HJsonPool.cpp"
     "HJson/HJsonValue.cpp"
     "HValue/HValue.cpp"
     "Utils/HSha256/HSha256.cpp"

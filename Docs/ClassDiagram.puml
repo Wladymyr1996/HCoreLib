@@ -1,0 +1,300 @@
+@startuml HCoreLib
+' ---------------------------------------------------------------------------
+' HCoreLib - structure only.
+'
+' Names, relations and the role of each class. No fields and no methods: the
+' headers carry those and would only go stale here. What this diagram is for is
+' the SHAPE of the library - which class knows about which, and which side of
+' the hardware line each one sits on.
+'
+' THE THREE ROLES
+'   «boundary»  something on the EDGE of the process - a pad, a file, a socket,
+'               a console, a person's finger. Everything platform-specific in
+'               this library is a boundary class, which is why so many of them
+'               come in pairs (an ESP32 one and a desktop one) behind an
+'               interface, with nothing above them knowing which was compiled in.
+'   «control»   logic and coordination, with no state of its own worth naming.
+'               Almost every one of these is a static facade: HCoreLib starts no
+'               tasks and instantiates no managers.
+'   «entity»    a value or a record the rest of the system passes around.
+'
+' Two classifications are arguable and deliberate. HGpioPin and HButton are
+' boundary rather than control: a switch and a pad are what a PERSON acts on,
+' and turning that into "pressed" is what those two exist for, debounce state
+' machine included. HSha256 and HUtf8 are control rather than entity: they hold
+' no data at all, only a transformation.
+'
+' HLog is drawn with almost no edges on purpose. Nearly every class in the
+' library logs, and those thirty arrows would bury the ones that say something.
+' Read it as: everything depends on HLog.
+'
+' Platform-only classes are marked in their package names. HTask, HTaskManager,
+' Devices and Portal exist on the ESP32 only - the host build compiles neither
+' them nor anything that needs them.
+' ---------------------------------------------------------------------------
+
+skinparam backgroundColor #FEFEFE
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam ArrowColor #33556B
+skinparam package {
+  BorderColor #8FA6B4
+  BackgroundColor #FBFCFD
+}
+
+' The role is the thing this diagram is FOR, so it is a colour and not only a
+' word: the hardware edge, the logic and the data should be separable at a
+' glance, from across a room, before anybody reads a single class name.
+skinparam class<<boundary>> {
+  BorderColor #1F6F8B
+  BackgroundColor #E8F4F8
+}
+skinparam class<<control>> {
+  BorderColor #99621E
+  BackgroundColor #FBF0E0
+}
+skinparam class<<entity>> {
+  BorderColor #3E7D4F
+  BackgroundColor #E9F5EC
+}
+
+hide empty members
+hide circle
+
+package "Values" {
+  class HValue <<entity>>
+  class HTimer <<entity>>
+  class HHookList <<entity>>
+  class HSha256 <<control>>
+  class HSystemUtils <<boundary>>
+
+  note bottom of HSystemUtils
+    A namespace of free functions, not a class:
+    the platform's clock, thread name and sleep.
+    Drawn as a box because everything that has
+    to notice time crosses it.
+  end note
+}
+
+package "Configuration" {
+  class HConfig <<control>>
+  class HConfigParser <<control>>
+  class HConfigWriter <<control>>
+  class HConfigPath <<entity>>
+  class HConfigEntry <<entity>>
+}
+
+package "Storage" {
+  class "HFs::HFileSystem" as HFileSystem <<boundary>>
+  class HIFs <<boundary>>
+  class HIFile <<boundary>>
+  class HFsDesktop <<boundary>>
+  class HFsDesktopFile <<boundary>>
+  class HLittleFs <<boundary>>
+  class HLittleFsFile <<boundary>>
+}
+
+package "GPIO" {
+  class HGpioManager <<control>>
+  class HGpioPin <<boundary>>
+  class HGpioBackend <<boundary>>
+  class HIGpio <<boundary>>
+  class HGpioEsp32 <<boundary>>
+  class HGpioDesktop <<boundary>>
+  class HGpioPinDesc <<entity>>
+
+  note bottom of HGpioBackend
+    One free function, hGpioBackend(), and no class:
+    the seam where the platform is chosen, and the
+    only thing a pin needs to reach a pad.
+  end note
+}
+
+package "Logging" {
+  class HLog <<control>>
+  class HILogBackend <<boundary>>
+  class HConsoleLogBackend <<boundary>>
+  class HLogRecord <<entity>>
+}
+
+package "JSON" {
+  class HJsonDocument <<entity>>
+  class HJsonValue <<entity>>
+  class HJsonPool <<entity>>
+}
+
+package "Lifecycle" {
+  class HITickable <<control>>
+  class HButton <<boundary>>
+  class HBootMode <<control>>
+  class HSleep <<control>>
+  class HRtcStore <<control>>
+  class HAuth <<control>>
+}
+
+package "Tasks (ESP32 only)" {
+  class HTask <<boundary>>
+  class HTaskManager <<control>>
+  class HIWatchable <<control>>
+}
+
+package "Devices (ESP32 only)" {
+  class HAHT20 <<boundary>>
+  class HAHT20Sample <<entity>>
+  class HBMP280 <<boundary>>
+  class HBMP280Sample <<entity>>
+  class HSSD1306Panel <<boundary>>
+  class HSSD1306 <<boundary>>
+  class HIFont <<entity>>
+  class HFont <<entity>>
+  class HFont6x8 <<entity>>
+  class HFont8x16 <<entity>>
+  class HFont24x32 <<entity>>
+  class HUtf8 <<control>>
+}
+
+package "Portal (ESP32 only)" {
+  class HNetwork <<boundary>>
+  class HWebServer <<boundary>>
+  class HCaptiveDns <<boundary>>
+  class HStaticUi <<boundary>>
+  class HRestApi <<boundary>>
+  class HRestRequest <<boundary>>
+  class HRestResponse <<boundary>>
+  class HFactoryReset <<control>>
+}
+
+' --- Values --------------------------------------------------------------
+HTimer ..> HSystemUtils : reads the clock
+
+' --- Configuration -------------------------------------------------------
+' Stateless: every call streams the file and closes it again, which is why
+' HConfig owns none of these and depends on all of them.
+HConfig ..> HConfigParser
+HConfig ..> HConfigWriter
+HConfig ..> HConfigPath
+HConfig ..> HConfigEntry
+HConfig ..> HFileSystem
+HConfigParser ..> HConfigPath
+HConfigParser ..> HFileSystem
+HConfigWriter ..> HConfigPath
+HConfigWriter ..> HFileSystem
+HConfigEntry *-- HValue : one scalar
+
+' --- Storage -------------------------------------------------------------
+' Exactly one backend pair is compiled in; the facade is what call sites name.
+HFileSystem ..> HIFs : forwards to the\ncompiled-in backend
+HIFs ..> HIFile : opens into
+HIFs <|.. HFsDesktop
+HIFs <|.. HLittleFs
+HIFile <|.. HFsDesktopFile
+HIFile <|.. HLittleFsFile
+
+' --- GPIO ----------------------------------------------------------------
+' The pin asks HGpioBackend, not the manager. A pin needs the PADS, and going
+' through the class that hands pins out made the part depend on the whole.
+HGpioManager ..> HGpioPinDesc : owns the board table
+HGpioManager ..> HGpioPin : hands out
+HGpioManager ..> HGpioBackend
+HGpioPin --> HGpioPinDesc : one declared row
+HGpioPin ..> HGpioBackend : reads and writes the pad through
+HGpioBackend ..> HIGpio : the one compiled in
+HIGpio <|.. HGpioEsp32
+HIGpio <|.. HGpioDesktop
+
+' --- Logging -------------------------------------------------------------
+HLog ..> HLogRecord : formats one
+HLog ..> HILogBackend : fans out to
+HLog ..> HSystemUtils : time and thread
+HILogBackend ..> HLogRecord
+HILogBackend <|.. HConsoleLogBackend
+
+' --- JSON ----------------------------------------------------------------
+' One bump allocator and no heap, so the document owns every node in it. A node
+' holds the POOL rather than the document: it needs memory, not a tree.
+HJsonDocument *-- "0..*" HJsonValue
+HJsonDocument *-- HJsonPool : owns the arena
+HJsonValue ..> HJsonPool : allocates from
+
+' --- Lifecycle -----------------------------------------------------------
+HITickable <|.. HButton
+HButton --> HGpioPin
+HButton *-- HTimer : debounce and hold
+HSleep ..> HGpioPin : wake source
+HSleep ..> HHookList : before sleep / after wake
+HAuth ..> HConfig : stores the hash
+HAuth ..> HSha256
+
+' --- Tasks ---------------------------------------------------------------
+' The watchdog watches an interface it declares itself, so it never names the
+' class that enrols with it.
+HTaskManager ..> HIWatchable : watches
+HTaskManager ..> HRtcStore : invalidates on a cold restart
+HTaskManager ..> HBootMode
+HIWatchable <|.. HTask
+HTask ..> HTaskManager : enrols itself
+
+' --- Devices -------------------------------------------------------------
+HAHT20 ..> HAHT20Sample
+HBMP280 ..> HBMP280Sample
+HSSD1306Panel <|-- HSSD1306
+HSSD1306 ..> HIFont
+HSSD1306 ..> HUtf8
+HIFont <|-- HFont
+HFont <|-- HFont6x8
+HFont <|-- HFont8x16
+HFont <|-- HFont24x32
+
+' --- Portal --------------------------------------------------------------
+' HRestApi and HStaticUi hang their routes on the handle HWebServer owns, and
+' the application decides which of them exist at all - which is why nothing
+' here owns anything else.
+HNetwork ..> HWebServer : starts once up
+HCaptiveDns --|> HTask
+HCaptiveDns ..> HNetwork
+HStaticUi ..> HWebServer : registers routes
+HStaticUi ..> HNetwork
+HRestApi ..> HWebServer : registers routes
+HRestApi ..> HRestRequest
+HRestApi ..> HRestResponse
+HRestApi ..> HAuth : guards routes
+HRestApi ..> HFactoryReset
+HRestRequest ..> HJsonDocument : parses the body
+HRestRequest ..> HAuth
+HFactoryReset ..> HConfig : erases
+HFactoryReset ..> HBootMode : reboots into Normal
+HFactoryReset ..> HHookList
+
+' ---------------------------------------------------------------------------
+note as Acyclic
+  **This graph has no cycles, and it used to have three.**
+
+  Each one was a part reaching back for the whole to get one thing, and each
+  was broken by naming that one thing:
+
+  * HGpioPin asked HGpioManager for the pads. It asks **HGpioBackend** now -
+    a pin needs pads, not the table of pins.
+  * HJsonValue asked HJsonDocument for memory. It asks **HJsonPool** now -
+    a node needs an allocator, not a tree.
+  * HTaskManager watched an HTask to read its name. It watches **HIWatchable**
+    now, an interface it declares itself, so the watchdog no longer knows what
+    a task is.
+
+  All three were closed by a .cpp rather than a header, so none of them ever
+  broke a build - which is exactly what made them worth removing on purpose
+  rather than eventually, when one of them stopped being merely a diagram.
+end note
+
+' No class in this library has more than one base, so there is no diamond and
+' no virtual inheritance anywhere: every hierarchy above is a chain, at most
+' three deep (HIFont <- HFont<W,H> <- HFont6x8).
+' ---------------------------------------------------------------------------
+
+legend right
+  |= role |= what it means |
+  |<#E8F4F8> «boundary» | the edge of the process: a pad, a file, a socket, a person |
+  |<#FBF0E0> «control» | logic and coordination, no state of its own |
+  |<#E9F5EC> «entity» | a value or record that gets passed around |
+endlegend
+
+@enduml

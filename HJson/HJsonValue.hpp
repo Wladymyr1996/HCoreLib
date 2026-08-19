@@ -3,20 +3,22 @@
 #include <cstddef>
 #include <string_view>
 
-class HJsonDocument;
+class HJsonPool;
 
 /**
  * @brief A single mutable JSON node (Object, Array, String, Int, Double, Bool or Null).
  *
  * HJsonValue never allocates from the system heap: every child node and
- * every string it owns is carved out of its parent HJsonDocument's bump
- * allocator. Children of an Object or Array are stored as an intrusive
- * singly-linked list (`head_` / `next_`) rather than a dynamic array,
- * so the DOM never needs to reallocate or move existing nodes.
+ * every string it owns is carved out of an HJsonPool, the bump allocator its
+ * document owns. It holds the POOL and not the document, which is what keeps
+ * the part from depending on the whole - a node needs memory, and has no
+ * business knowing what the tree it sits in is called. Children of an Object
+ * or Array are stored as an intrusive singly-linked list (`head_` / `next_`)
+ * rather than a dynamic array, so the DOM never needs to reallocate or move
+ * existing nodes.
  *
- * A node is only valid for as long as the HJsonDocument that allocated it
- * (and, for parsed strings, the pool memory it copied them into) remains
- * alive.
+ * A node is only valid for as long as the pool that allocated it (and, for
+ * parsed strings, the memory it copied them into) remains alive.
  */
 class HJsonValue {
  public:
@@ -33,10 +35,10 @@ class HJsonValue {
 
   /**
    * @brief Constructs a Null node.
-   * @param doc Owning document, used to request memory for future mutations.
-   *        May be nullptr for standalone/sentinel nodes that are never mutated.
+   * @param pool Allocator to request memory from for future mutations. May be
+   *        nullptr for standalone/sentinel nodes that are never mutated.
    */
-  explicit HJsonValue(HJsonDocument* doc = nullptr);
+  explicit HJsonValue(HJsonPool* pool = nullptr);
 
   /** @brief Returns this node's current type. */
   Type type() const;
@@ -120,6 +122,16 @@ class HJsonValue {
   /** @brief Returns the shared, process-wide dummy Null node used by the Null Object Pattern. */
   static const HJsonValue& nullValue();
 
+  /**
+   * @brief Allocates and placement-constructs a blank node in `pool`.
+   *
+   * Lives here rather than on the document because this is the only place that
+   * knows how big an HJsonValue is and how to construct one; the document
+   * calls it for the nodes it builds while parsing.
+   * @return The new node, or nullptr when the pool is exhausted.
+   */
+  static HJsonValue* allocateIn(HJsonPool& pool);
+
   /** @brief Linear search of this Object's children for `key`; nullptr if not an Object or not found. */
   HJsonValue* findChild(const char* key) const;
 
@@ -137,7 +149,8 @@ class HJsonValue {
 
   // HJsonDocument needs direct access to type_/value_/head_/next_/key_ to
   // build and serialize the DOM during parse()/serialize(), and to call
-  // linkChild() while parsing - see HJsonDocument.cpp.
+  // linkChild() and allocateIn() while parsing - see HJsonDocument.cpp. The
+  // friendship runs one way only: nothing in this class names the document.
   friend class HJsonDocument;
 
   /** @brief Backing storage for the scalar value kinds. Only one member is active at a time, per type_. */
@@ -153,5 +166,5 @@ class HJsonValue {
   HJsonValue* next_;     // Next sibling in the parent's children list.
   HJsonValue* head_;     // First child, for Object/Array types.
   const char* key_;      // Pool-owned key text; non-null only for Object members.
-  HJsonDocument* doc_;   // Owning document, used to allocate on mutation.
+  HJsonPool* pool_;      // Where a mutation gets its memory; null for sentinels.
 };

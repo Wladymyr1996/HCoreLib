@@ -1,6 +1,6 @@
 #include "HGpioPin.hpp"
 
-#include "../HGpioManager.hpp"
+#include "../HGpioBackend/HGpioBackend.hpp"
 #include "../HIGpio/HIGpio.hpp"
 
 namespace {
@@ -29,14 +29,14 @@ bool HGpioPin::read() const noexcept {
   if (desc_ == nullptr) {
     return false;
   }
-  return applyInvert(HGpioManager::instance().readRaw(desc_->number), desc_->invert);
+  return applyInvert(hGpioBackend().readRaw(desc_->number), desc_->invert);
 }
 
 void HGpioPin::write(bool value) const noexcept {
   if (desc_ == nullptr || desc_->dir != HGpioDir::Output) {
     return;
   }
-  HGpioManager::instance().writeRaw(desc_->number, applyInvert(value, desc_->invert));
+  hGpioBackend().writeRaw(desc_->number, applyInvert(value, desc_->invert));
 }
 
 const char* HGpioPin::name() const noexcept {

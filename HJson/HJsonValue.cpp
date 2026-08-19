@@ -1,11 +1,22 @@
 #include "HJsonValue.hpp"
 
 #include <cstring>
+#include <new>
 
-#include "HJsonDocument.hpp"
+#include "HJsonPool.hpp"
 
-HJsonValue::HJsonValue(HJsonDocument* doc)
-    : type_(Type::Null), value_(), next_(nullptr), head_(nullptr), key_(nullptr), doc_(doc) {
+HJsonValue::HJsonValue(HJsonPool* pool)
+    : type_(Type::Null), value_(), next_(nullptr), head_(nullptr), key_(nullptr), pool_(pool) {
+}
+
+HJsonValue* HJsonValue::allocateIn(HJsonPool& pool) {
+  void* mem = pool.allocate(sizeof(HJsonValue));
+  if (mem == nullptr) {
+    return nullptr;
+  }
+  // Placement-new: constructs into pool memory that is already reserved. This
+  // is not a heap allocation - it just runs the constructor at that address.
+  return new (mem) HJsonValue(&pool);
 }
 
 HJsonValue::Type HJsonValue::type() const {
@@ -83,7 +94,7 @@ const HJsonValue& HJsonValue::operator[](const char* key) const {
 }
 
 HJsonValue& HJsonValue::operator[](const char* key) {
-  if (key == nullptr || doc_ == nullptr) {
+  if (key == nullptr || pool_ == nullptr) {
     return const_cast<HJsonValue&>(nullValue());
   }
 
@@ -103,11 +114,11 @@ HJsonValue& HJsonValue::operator[](const char* key) {
     return *existing;
   }
 
-  HJsonValue* child = doc_->allocateNode();
+  HJsonValue* child = allocateIn(*pool_);
   if (child == nullptr) {
     return const_cast<HJsonValue&>(nullValue());  // Pool exhausted: degrade gracefully instead of crashing.
   }
-  child->key_ = doc_->copyString(key, strlen(key));
+  child->key_ = pool_->copyString(key, strlen(key));
   linkChild(child);
   return *child;
 }
@@ -118,7 +129,7 @@ const HJsonValue& HJsonValue::at(size_t index) const {
 }
 
 HJsonValue& HJsonValue::pushBack() {
-  if (doc_ == nullptr) {
+  if (pool_ == nullptr) {
     return const_cast<HJsonValue&>(nullValue());
   }
 
@@ -129,7 +140,7 @@ HJsonValue& HJsonValue::pushBack() {
     return const_cast<HJsonValue&>(nullValue());
   }
 
-  HJsonValue* child = doc_->allocateNode();
+  HJsonValue* child = allocateIn(*pool_);
   if (child == nullptr) {
     return const_cast<HJsonValue&>(nullValue());
   }
@@ -206,6 +217,7 @@ HJsonValue& HJsonValue::operator=(const char* value) {
   type_ = Type::String;
   // Per spec: assigned strings are copied into the pool so their lifetime
   // no longer depends on whatever buffer the caller passed in.
-  value_.stringValue = (doc_ != nullptr && value != nullptr) ? doc_->copyString(value, strlen(value)) : nullptr;
+  value_.stringValue =
+      (pool_ != nullptr && value != nullptr) ? pool_->copyString(value, strlen(value)) : nullptr;
   return *this;
 }

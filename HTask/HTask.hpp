@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include <HTaskManager/HIWatchable/HIWatchable.hpp>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -25,8 +27,13 @@
  *
  * The object must outlive the task, so give it static storage duration - the
  * trampoline dereferences `this` on every wake-up.
+ *
+ * It is an HIWatchable because that is all HTaskManager needs of it - a name -
+ * and implementing the watchdog's own interface is what lets the watchdog stay
+ * ignorant of this class. Nothing about starting or running a task goes
+ * through it.
  */
-class HTask {
+class HTask : public HIWatchable {
  public:
   /** @brief Passed as the timeout to leave a task unwatched. */
   static constexpr uint32_t kNoWatchdog = 0;
@@ -65,7 +72,7 @@ class HTask {
   bool isRunning() const noexcept;
 
   /** @brief The task's name, as given to the constructor. */
-  const char* name() const noexcept;
+  const char* name() const noexcept override;
 
   /** @brief The watchdog timeout this task was built with. */
   uint32_t watchdogMs() const noexcept;

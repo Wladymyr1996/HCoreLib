@@ -2,6 +2,7 @@
 
 #include <cstddef>
 
+#include "HJson/HJsonPool.hpp"
 #include "HJson/HJsonValue.hpp"
 
 /**
@@ -9,10 +10,15 @@
  *        the parser, and the serializer.
  *
  * HJsonDocument takes a caller-owned buffer and never touches the system
- * heap: every HJsonValue node and every string the DOM owns is carved out
- * of that buffer by a strict bump (pointer-increment) allocator that never
- * frees individual allocations. Calling parse() again reclaims the whole
- * buffer at once and starts over.
+ * heap: every HJsonValue node and every string the DOM owns is carved out of
+ * that buffer by an HJsonPool - a strict bump (pointer-increment) allocator
+ * that never frees individual allocations. Calling parse() again reclaims the
+ * whole buffer at once and starts over.
+ *
+ * The pool is a member rather than something this class does itself, so that
+ * the nodes can hold the ALLOCATOR instead of holding the document: a part of
+ * a document that depends on the whole of it is a cycle, and there is nothing
+ * about allocating memory that needs to know what a JSON tree is.
  *
  * Because of the fixed backing buffer (typically a few KB), prefer
  * static/global storage for HJsonDocument instances over placing them deep
@@ -31,12 +37,7 @@ class HJsonDocument {
   HJsonDocument(char* buffer, size_t capacity);
 
   /**
-   * @brief Bump-allocates `size` bytes from the backing buffer.
-   *
-   * Allocations are rounded up to `alignof(std::max_align_t)` so any type
-   * (including HJsonValue itself) can be placement-constructed at the
-   * returned address. There is no matching free(): memory is only
-   * reclaimed in bulk, by calling parse() again.
+   * @brief Bump-allocates `size` bytes from the backing buffer. @see HJsonPool
    * @return Pointer to the allocation, or nullptr if the buffer is exhausted.
    */
   void* allocate(size_t size);
@@ -76,10 +77,6 @@ class HJsonDocument {
   size_t capacityBytes() const;
 
  private:
-  // HJsonValue's mutating methods (operator[], pushBack, operator=) need to
-  // request pool memory via allocateNode()/copyString() - see HJsonValue.cpp.
-  friend class HJsonValue;
-
   /** @brief Allocates and placement-constructs a blank HJsonValue in the pool. */
   HJsonValue* allocateNode();
 
@@ -99,8 +96,7 @@ class HJsonDocument {
   static size_t appendText(char* out, size_t outSize, size_t pos, const char* text, size_t length);
   static size_t appendEscapedText(char* out, size_t outSize, size_t pos, const char* text, size_t length);
 
-  char* buffer_;
-  size_t capacity_;
-  size_t used_;
+  // Declared before root_, which is constructed with a pointer to it.
+  HJsonPool pool_;
   HJsonValue root_;
 };
