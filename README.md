@@ -64,6 +64,19 @@ identical on every device, with the device-specific parts injected. See
 Its own component, so a device that serves no portal builds no Wi-Fi, no HTTP
 and no mDNS.
 
+### `HCoreLib/WebUi` — the shared configuration page
+
+The browser half of the same idea: one stylesheet and one script carrying
+everything a configuration page needs that is *not* about what the device
+measures — the bar, the link LED, the administrator session and its modal, the
+factory reset, the firmware line, the translation lookup and the one poll timer
+the page is allowed. See [WebUi/README.md](WebUi/README.md).
+
+Not a component and not compiled: an application links both files from its own
+`index.htm`, and `tools/packui.py` folds the lot into the single file the
+firmware embeds. What is left for the application is its readings, its settings
+and its words.
+
 ## What an application must provide
 
 Two headers, named by the library and owned by the application:
@@ -123,7 +136,8 @@ so they have no suite; the firmware repositories that consume this one cover the
 ## Tools
 
 `tools/packui.py` folds a web UI's HTML, CSS and JS into one gzipped file for
-embedding — see [Portal/README.md](Portal/README.md).
+embedding — every stylesheet and script the page links, shared ones included.
+See [WebUi/README.md](WebUi/README.md) and [Portal/README.md](Portal/README.md).
 
 ## Dependencies
 

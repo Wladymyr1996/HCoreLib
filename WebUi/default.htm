@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hatynka — new device</title>
+
+<!--
+  The starting point for a new device in the family, and a working example of
+  every shared component at once.
+
+  Open this file in a browser. With no device to talk to it still draws: the
+  link LED goes red, the readings show dashes, and everything else - the chip,
+  the modal, the panels, the gallery below - works exactly as it will on the
+  real thing. Type a device's address into the Device panel and the same page
+  starts talking to it.
+
+  To start an application from it
+  ------------------------------
+  1. Copy this file to your device's `WebUi/index.htm`.
+  2. Point the two links at the shared folder from there:
+         href="../HCoreLib/WebUi/core.css"    src="../HCoreLib/WebUi/core.js"
+     ...and add your own `app.css` after core.css, so you override the family's
+     defaults rather than fight them.
+  3. Move the script block at the foot of this file into `WebUi/app.js` and
+     load it after core.js. It is inline HERE only so that this file is one
+     thing you can read top to bottom.
+  4. Delete the Components panel. It is a catalogue, not a feature.
+  5. Add the four sources to your `App/CMakeLists.txt` DEPENDS list.
+
+  See README.md for the whole of HCore's surface and the ids it drives.
+-->
+<link rel="stylesheet" href="core.css">
+</head>
+<body>
+
+<!-- ===================================================================
+     THE SHELL. Every element below is driven by core.js and is the same
+     on every device in the family. Copy it as it stands; the only thing
+     here worth editing is the brand.
+
+     All of it is optional - core.js tolerates a missing element - so a
+     device with no factory reset simply deletes that panel and writes no
+     code to make up for it.
+     =================================================================== -->
+
+<header class="bar">
+  <div class="brand">Hatynka&nbsp;Device</div>
+
+  <div class="bar__right">
+    <!-- Whether THIS PAGE can reach the device. Not the device's own radio -
+         from here those are the same question, and this is the one the person
+         looking at a stale number needs answered. -->
+    <span id="linkDot" class="led led--wait" role="status" aria-live="polite" title=""></span>
+
+    <!-- The whole label is the button: unauthorised opens the login modal, and
+         "Admin" opens it again to log out. One target, both states. -->
+    <button id="authChip" class="chip chip--busy" type="button">
+      <span id="authChipText">…</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ===================================================================
+       YOUR DEVICE starts here. Everything from this point to the danger
+       panel is the example, and is meant to be replaced.
+       =================================================================== -->
+
+  <!-- Hello world. No device needed: it is drawn from the dictionary, so it
+       proves the page is alive and changes language with the select below. -->
+  <section class="panel">
+    <h2 id="helloTitle">Hello, world</h2>
+    <p class="modal__text" id="helloText"></p>
+  </section>
+
+  <!-- Two readings from GET /api/values, converted at the edge by HCore.units.
+       Dashes until the first answer arrives, and dashes again if it stops. -->
+  <section class="cards" id="dashboard">
+    <article class="card">
+      <h2 id="tempLabel">Temperature</h2>
+      <p class="value"><span id="tempValue" class="skeleton">&nbsp;</span><span id="tempUnit" class="unit"></span></p>
+    </article>
+
+    <article class="card">
+      <h2 id="pressLabel">Pressure</h2>
+      <p class="value"><span id="pressValue" class="skeleton">&nbsp;</span><span id="pressUnit" class="unit"></span></p>
+    </article>
+  </section>
+
+  <p class="hint" id="updatedHint">&nbsp;</p>
+
+  <!-- Settings. Visible to everyone, editable only with a key, so somebody who
+       has not signed in can still see what the device is set to.
+
+       The panel is yours - a sibling device has different settings - but
+       #changePassButton and #saveState are the shell's, and core.js wires them
+       wherever you put them. -->
+  <section class="panel" id="settingsPanel">
+    <h2 id="settingsTitle">Settings</h2>
+
+    <div class="field">
+      <label for="langSelect" id="langLabel">Language</label>
+      <select id="langSelect" disabled>
+        <option value="en">English</option>
+        <option value="uk">Українська</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="tempUnitSelect" id="tempUnitLabel">Temperature units</label>
+      <select id="tempUnitSelect" disabled>
+        <option value="celsius">Celsius (°C)</option>
+        <option value="fahrenheit">Fahrenheit (°F)</option>
+      </select>
+    </div>
+
+    <div class="actions">
+      <button id="saveButton" class="button" type="button" disabled>Save</button>
+      <button id="changePassButton" class="button button--ghost" type="button" disabled>Change password</button>
+      <span id="saveState" class="hint"></span>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       THE CATALOGUE. Every class core.css offers, drawn once so you can
+       see what it looks like before you reach for it. Nothing here is
+       wired to anything, and none of it belongs in a real device -
+       delete this whole section first.
+       =================================================================== -->
+  <section class="panel" id="componentsPanel">
+    <h2 id="componentsTitle">Components <span class="tag">demo</span></h2>
+    <p class="modal__text" id="componentsText"></p>
+
+    <div class="field">
+      <label>.button — three variants</label>
+      <span class="actions" style="margin:0">
+        <button class="button" type="button">Primary</button>
+        <button class="button button--ghost" type="button">Ghost</button>
+        <button class="button button--danger" type="button">Danger</button>
+      </span>
+    </div>
+
+    <div class="field">
+      <label>.button:disabled — permission, not decoration</label>
+      <button class="button" type="button" disabled>Save</button>
+    </div>
+
+    <div class="field">
+      <label>.chip — the three session states</label>
+      <span class="bar__right">
+        <span class="chip chip--admin">Admin</span>
+        <span class="chip chip--anon">Unauthorized</span>
+        <span class="chip chip--busy">Checking…</span>
+      </span>
+    </div>
+
+    <div class="field">
+      <label>.led — reachable, trying, gone</label>
+      <span class="bar__right">
+        <span class="led led--ok"></span>
+        <span class="led led--wait"></span>
+        <span class="led led--lost"></span>
+      </span>
+    </div>
+
+    <div class="field">
+      <label>.skeleton — "nothing yet", never "nothing at all"</label>
+      <span class="value"><span class="skeleton">&nbsp;</span></span>
+    </div>
+
+    <div class="field">
+      <label for="demoInput">select, input — inherit the theme, no reset needed</label>
+      <input id="demoInput" type="text" placeholder="Type here" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label>.error — what went wrong, in the error colour</label>
+      <span class="error">Wrong password.</span>
+    </div>
+
+    <div class="field">
+      <label>.hint — secondary, and it reserves its own line</label>
+      <span class="hint" style="margin:0">Updated 14:32:05</span>
+    </div>
+
+    <!-- A time bar, not a measurement. Shown here half-run; core.js drives the
+         real one during a factory reset. -->
+    <div class="progress"><div class="progress__bar" style="width:60%"></div></div>
+
+    <div class="actions">
+      <span class="hint" style="margin:0">.busy dims a whole panel while it waits →</span>
+      <span class="chip busy">Waiting</span>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       THE SHELL again.
+       =================================================================== -->
+
+  <!-- Destructive, so it lives apart from the settings it would throw away -
+       nobody should reach it while aiming for Save. Confirm, a timed bar, then
+       the page stops asking: the device is erasing its filesystem and rebooting
+       into Normal, where there is no server to answer.
+
+       Not one line of application code: core.js owns the whole flow. -->
+  <section class="panel panel--danger" id="dangerPanel">
+    <h2 id="dangerTitle">Factory reset</h2>
+    <p class="hint" id="dangerText"></p>
+    <div class="actions">
+      <button id="resetButton" class="button button--danger" type="button" disabled>Reset</button>
+    </div>
+  </section>
+
+  <!-- DEBUG ONLY. Which device to talk to when this page was opened from a file
+       rather than served by the device itself. tools/packui.py deletes this
+       section from the release build, where the answer is always "wherever this
+       page came from" - so it cannot appear in front of a user. -->
+  <section class="panel panel--dev" id="devPanel" hidden>
+    <h2>Device <span class="tag">debug</span></h2>
+    <div class="field">
+      <label for="deviceInput">Base URL</label>
+      <input id="deviceInput" type="url" placeholder="http://192.168.4.1" spellcheck="false">
+    </div>
+    <div class="actions">
+      <button id="deviceButton" class="button button--ghost" type="button">Connect</button>
+      <span id="deviceState" class="hint"></span>
+    </div>
+  </section>
+
+  <!-- What is actually running on the device, read from the image's own
+       descriptor. Faint on purpose: it is the first thing asked for when
+       something is wrong and the last thing wanted when nothing is. -->
+  <footer class="footer"><span id="fwVersion">&nbsp;</span></footer>
+
+</main>
+
+<!-- Login / first-run password / change password - one dialog, three modes,
+     all three driven by core.js. Hidden until the chip is clicked. -->
+<div class="modal" id="modal" hidden>
+  <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle">Administrator</h2>
+    <p class="modal__text" id="modalText"></p>
+
+    <div class="field">
+      <label for="passInput" id="passLabel">Password</label>
+      <input id="passInput" type="password" autocomplete="current-password">
+    </div>
+
+    <p class="error" id="modalError" hidden></p>
+
+    <div class="actions">
+      <button id="modalCancel" class="button button--ghost" type="button">Cancel</button>
+      <button id="modalSubmit" class="button" type="button">Sign in</button>
+    </div>
+  </div>
+</div>
+
+<!-- Factory reset: confirm, then a progress bar, then the last thing this page
+     will ever say to that device on this connection. -->
+<div class="modal" id="resetModal" hidden>
+  <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
+    <h2 id="resetTitle">Factory reset</h2>
+    <p class="modal__text" id="resetText"></p>
+
+    <div class="progress" id="resetProgress" hidden>
+      <div class="progress__bar" id="resetBar"></div>
+    </div>
+
+    <!-- Cancel and Reset while there is still a choice; Close once there is
+         not. Something is always here: a modal with no way out reads as a
+         page that has crashed. -->
+    <div class="actions" id="resetActions">
+      <button id="resetCancel" class="button button--ghost" type="button">Cancel</button>
+      <button id="resetConfirm" class="button button--danger" type="button">Reset</button>
+      <button id="resetClose" class="button" type="button" hidden disabled>Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="core.js"></script>
+
+<!--
+  ===================================================================
+  THE APPLICATION. In a real device this is `WebUi/app.js`, loaded
+  after core.js; it is inline here so the example is one file.
+
+  Everything it does is below. There is no code for the link LED, the
+  session, the password modal, the factory reset, the firmware line or
+  the development panel, because none of that is a device's business.
+  ===================================================================
+-->
+<script>
+(function () {
+  'use strict';
+
+  var VALUES_POLL_MS = 10000;
+
+  var $ = HCore.$;
+  var t = HCore.t;
+
+  var state = {
+    // What the device has SAVED, and what the selects currently show. They
+    // differ between changing a select and pressing Save, and everything is
+    // drawn from the DRAFT: changing the language and seeing the page stay in
+    // the old one until a round trip completes is the kind of lag that makes a
+    // UI feel broken.
+    //
+    // Seeded rather than left null, so this page is fully usable before - and
+    // without - a device.
+    config: null,
+    draft: { lang: 'en', tempUnit: 'celsius' },
+    values: null,
+    hint: { id: 'never', time: '' }
+  };
+
+  /* ---------------------------------------------------------------- words --- */
+
+  /*
+   * Only the words this device adds. Everything the shell says - the chip, the
+   * modal, the reset panel, the footer - is already in core.js. Using one of
+   * its ids here would override it, which is how you reword "Reset" without
+   * touching the shared file.
+   */
+  HCore.addStrings({
+    en: {
+      hello: 'Hello, world',
+      helloText: 'This page is served by the device itself. Nothing is fetched ' +
+                 'from the internet - there is no route to one.',
+      temperature: 'Temperature', pressure: 'Pressure',
+      settings: 'Settings', language: 'Language', tempUnits: 'Temperature units',
+      save: 'Save', saved: 'Saved', saving: 'Saving…',
+      updated: 'Updated', never: 'Waiting for the first reading…',
+      components: 'Components',
+      componentsText: 'Every class core.css offers. Delete this panel first.'
+    },
+    uk: {
+      hello: 'Привіт, світ',
+      helloText: 'Цю сторінку віддає сам пристрій. Нічого не завантажується з ' +
+                 'інтернету - до нього немає маршруту.',
+      temperature: 'Температура', pressure: 'Атм. тиск',
+      settings: 'Налаштування', language: 'Мова', tempUnits: 'Одиниці температури',
+      save: 'Зберегти', saved: 'Збережено', saving: 'Збереження…',
+      updated: 'Оновлено', never: 'Очікування першого вимірювання…',
+      components: 'Компоненти',
+      componentsText: 'Усі класи, які дає core.css. Цю панель видаліть першою.'
+    }
+  });
+
+  /* ------------------------------------------------------------ dashboard --- */
+
+  /*
+   * A reading is a fact about the world, not about a screen preference, so
+   * /api/values answers in one canonical unit - °C, hPa - and HCore.units
+   * converts on the edge that displays it, exactly as the device's own panel
+   * does. Add a unit and you add it in both places, or in neither.
+   */
+  var READINGS = [
+    { id: 'tempValue', unitId: 'tempUnit', field: 'temp',
+      convert: function (v) { return HCore.units.temperature(v, state.draft.tempUnit); } },
+    { id: 'pressValue', unitId: 'pressUnit', field: 'pressure',
+      convert: function (v) { return HCore.units.pressure(v, 'hPa'); } }
+  ];
+
+  function renderValues(values) {
+    // Kept, so a units change can redraw from what is already known instead of
+    // waiting up to ten seconds for the next poll to make the screen agree with
+    // the select the user just changed.
+    state.values = values;
+
+    READINGS.forEach(function (reading) {
+      var element = $(reading.id);
+      var value = values[reading.field];
+
+      HCore.setLoading(element, false);
+
+      // null is what a device reports for a quantity it has never measured - a
+      // sensor that failed to start, or a boot that has not read one yet. A
+      // dash says so; a zero would be a lie with two decimal places.
+      if (value === null || value === undefined) {
+        element.textContent = '--';
+        return;
+      }
+
+      var converted = reading.convert(value);
+      element.textContent = converted.value.toFixed(converted.decimals);
+      $(reading.unitId).textContent = converted.unit;
+    });
+  }
+
+  function loadValues(showSkeleton) {
+    if (showSkeleton) {
+      READINGS.forEach(function (r) { HCore.setLoading($(r.id), true); });
+    }
+
+    // HCore.api never throws and never hangs: it answers {status, ok, data},
+    // times every request out, and drives the link LED on the way past.
+    return HCore.api('/api/values').then(function (result) {
+      if (!result.ok) {
+        state.hint = { id: 'offline', time: '' };   // 'offline' is core's word
+        renderHint();
+
+        READINGS.forEach(function (r) {
+          HCore.setLoading($(r.id), false);
+          $(r.id).textContent = '--';
+        });
+        return;
+      }
+
+      renderValues(result.data);
+      state.hint = { id: 'updated', time: new Date().toLocaleTimeString() };
+      renderHint();
+    });
+  }
+
+  /* --------------------------------------------------------------- drawing --- */
+
+  /** The line under the cards, as an id and not as a sentence, so changing the
+      language re-translates what is already on the screen. */
+  function renderHint() {
+    var text = t(state.hint.id);
+    $('updatedHint').textContent = state.hint.time ? (text + ' ' + state.hint.time) : text;
+  }
+
+  /**
+   * Everything this page owns, redrawn.
+   *
+   * HCore calls it after anything of its own changes - a sign-in, a lost link,
+   * a new language - and this file calls it whenever the draft moves. One
+   * function, so there is never a half-drawn page.
+   */
+  function render() {
+    // Visible to everyone, editable only with a key.
+    var editable = HCore.isAdmin();
+    ['langSelect', 'tempUnitSelect', 'saveButton',
+     'changePassButton', 'resetButton'].forEach(function (id) {
+      HCore.setDisabled(id, !editable);
+    });
+
+    $('langSelect').value = state.draft.lang;
+    $('tempUnitSelect').value = state.draft.tempUnit;
+
+    $('helloTitle').textContent = t('hello');
+    $('helloText').textContent = t('helloText');
+    $('tempLabel').textContent = t('temperature');
+    $('pressLabel').textContent = t('pressure');
+    $('settingsTitle').textContent = t('settings');
+    $('langLabel').textContent = t('language');
+    $('tempUnitLabel').textContent = t('tempUnits');
+    $('saveButton').textContent = t('save');
+    $('componentsText').textContent = t('componentsText');
+    renderHint();
+
+    if (state.values) { renderValues(state.values); }
+  }
+
+  /* -------------------------------------------------------------- settings --- */
+
+  function loadConfig() {
+    var panel = $('settingsPanel');
+    panel.classList.add('busy');    // dimmed and inert while it waits
+
+    return HCore.api('/api/config').then(function (result) {
+      panel.classList.remove('busy');
+      if (!result.ok) { return; }
+
+      state.config = result.data;
+      state.draft = { lang: result.data.lang, tempUnit: result.data.tempUnit };
+
+      HCore.setLanguage(state.draft.lang);
+      render();
+    });
+  }
+
+  /**
+   * A select changed. Redraw in the new language and units at once, WITHOUT
+   * saving - the device is asked only when Save is pressed, and it is the
+   * authority on what is stored, not on what the person in front of it is
+   * currently reading.
+   */
+  function onDraftChange() {
+    state.draft = {
+      lang: $('langSelect').value,
+      tempUnit: $('tempUnitSelect').value
+    };
+
+    // The shell follows the draft too, so the chip, the LED's tooltip and the
+    // footer change language in the same frame the labels do.
+    HCore.setLanguage(state.draft.lang);
+    render();
+    setStatus('');
+  }
+
+  function saveConfig() {
+    // `auth: true` sends the session key. Without it the device answers 401 and
+    // nothing here has to know how the key is stored.
+    var body = { lang: state.draft.lang, tempUnit: state.draft.tempUnit };
+
+    $('saveButton').disabled = true;
+    setStatus(t('saving'));
+
+    return HCore.api('/api/config', { method: 'POST', body: body, auth: true })
+      .then(function (result) {
+        $('saveButton').disabled = false;
+
+        if (result.status === 401) {
+          // The key expired while the page stayed open. Drop back to the
+          // unauthorised state rather than leave a Save button that fails.
+          setStatus('');
+          HCore.checkAuth();
+          return;
+        }
+
+        if (!result.ok) { setStatus(t('offline')); return; }
+
+        state.config = body;
+        render();
+        setStatus(t('saved'), 2000);
+      });
+  }
+
+  /* ------------------------------------------------------------------ boot --- */
+
+  var statusTimer = null;
+
+  /** Where a short sentence goes - HCore's "Signed out." as much as our
+      "Saved". Everything that writes there goes through here, so a clear-timer
+      left over from the last sentence cannot wipe the next one. */
+  function setStatus(text, clearAfterMs) {
+    $('saveState').textContent = text;
+
+    if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+    if (clearAfterMs) {
+      statusTimer = setTimeout(function () { $('saveState').textContent = ''; }, clearAfterMs);
+    }
+  }
+
+  /**
+   * Re-run whenever there is a (different) device to talk to - the development
+   * panel calls it again on Connect - so nothing here may assume it is the
+   * first time.
+   */
+  function start() {
+    render();
+
+    // Config first: it decides the units and the language everything else is
+    // drawn in, so fetching values before it would show a number in the wrong
+    // unit for one frame.
+    loadConfig()
+      .then(HCore.checkAuth)
+      .then(function () { return loadValues(true); })
+      .then(HCore.loadInfo);
+
+    // The page's ONE recurring request, stopped while the tab is hidden. One,
+    // not many: the device serving this page is an access point running off a
+    // battery, and every timer you forget to cancel is paid for in milliamps.
+    HCore.poll(function () { loadValues(false); }, VALUES_POLL_MS);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    HCore.onRender(render);     // redraw us after anything of HCore's changes
+    HCore.onStatus(setStatus);  // and this is where it may say something
+
+    HCore.on('langSelect', 'change', onDraftChange);
+    HCore.on('tempUnitSelect', 'change', onDraftChange);
+    HCore.on('saveButton', 'click', saveConfig);
+
+    // Resolves which device to talk to, wires the shell, then runs start().
+    HCore.begin(start);
+  });
+})();
+</script>
+</body>
+</html>
