@@ -41,7 +41,8 @@ add_executable(hcorelibtests
     "HGpioTest.cpp"
     "HButtonTest.cpp"
     "HRtcStoreTest.cpp"
-    "HAuthTest.cpp")
+    "HAuthTest.cpp"
+    "HOtaImageTest.cpp")
 
 target_link_libraries(hcorelibtests PRIVATE HCoreLib)
 

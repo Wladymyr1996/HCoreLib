@@ -81,6 +81,27 @@
       signOut: 'Signed out.', offline: 'Device did not answer.',
       linkOk: 'Connected', linkWait: 'Connecting…', linkLost: 'Connection lost',
       firmware: 'Firmware',
+      fwTitle: 'Firmware update',
+      fwText: 'Upload a .bin built for this device. It is checked before anything is written.',
+      fwImage: 'Image', fwGo: 'Update', fwNoFile: 'Choose a file.',
+      fwRunning: 'Running', fwSending: 'Uploading…', fwVerifying: 'Verifying…',
+      fwDone: 'Updated. The device is restarting.',
+      fwFailed: 'Update failed.', fwOffline: 'Device did not answer.',
+      fwOlderAsk: 'That image is OLDER than what is running. Install it anyway?',
+      fwInstallAnyway: 'Install anyway',
+      // One per reason the device can answer with, so a refusal reads as a
+      // sentence rather than as the wire's own vocabulary.
+      'fwReason.not an image': 'That file is not a firmware image.',
+      'fwReason.wrong chip': 'That image was built for a different chip.',
+      'fwReason.no descriptor': 'That image has no version information.',
+      'fwReason.wrong device': 'That image is for a different device.',
+      'fwReason.bad version': 'That image has no usable version number.',
+      'fwReason.older version': 'That image is older than what is running.',
+      'fwReason.same version': 'That version is already running.',
+      'fwReason.too large': 'That image is too large for this device.',
+      'fwReason.write failed': 'The device could not write it to flash.',
+      'fwReason.verify failed': 'The upload was incomplete or corrupted.',
+      'fwReason.incomplete': 'The upload was incomplete.',
       resetTitle: 'Factory reset', resetGo: 'Reset',
       dangerText: 'Erases every setting and the administrator password, then restarts.',
       resetAsk: 'This erases every setting and the administrator password. It cannot be undone.',
@@ -100,6 +121,25 @@
       signOut: 'Ви вийшли.', offline: 'Пристрій не відповідає.',
       linkOk: 'З’єднано', linkWait: 'З’єднання…', linkLost: 'Немає зв’язку',
       firmware: 'Прошивка',
+      fwTitle: 'Оновлення прошивки',
+      fwText: 'Завантажте .bin для цього пристрою. Файл перевіряється до запису.',
+      fwImage: 'Файл', fwGo: 'Оновити', fwNoFile: 'Оберіть файл.',
+      fwRunning: 'Встановлено', fwSending: 'Завантаження…', fwVerifying: 'Перевірка…',
+      fwDone: 'Оновлено. Пристрій перезапускається.',
+      fwFailed: 'Не вдалося оновити.', fwOffline: 'Пристрій не відповідає.',
+      fwOlderAsk: 'Ця прошивка СТАРІША за встановлену. Все одно встановити?',
+      fwInstallAnyway: 'Все одно встановити',
+      'fwReason.not an image': 'Цей файл не є прошивкою.',
+      'fwReason.wrong chip': 'Прошивку зібрано для іншого чипа.',
+      'fwReason.no descriptor': 'У прошивці немає даних про версію.',
+      'fwReason.wrong device': 'Ця прошивка для іншого пристрою.',
+      'fwReason.bad version': 'У прошивки немає придатного номера версії.',
+      'fwReason.older version': 'Ця прошивка старіша за встановлену.',
+      'fwReason.same version': 'Ця версія вже встановлена.',
+      'fwReason.too large': 'Прошивка завелика для цього пристрою.',
+      'fwReason.write failed': 'Пристрій не зміг записати її у флеш.',
+      'fwReason.verify failed': 'Завантаження неповне або пошкоджене.',
+      'fwReason.incomplete': 'Завантаження неповне.',
       resetTitle: 'Скидання', resetGo: 'Скинути',
       dangerText: 'Стирає всі налаштування та пароль адміністратора, потім перезапускає.',
       resetAsk: 'Це зітре всі налаштування та пароль адміністратора. Дію не можна скасувати.',
@@ -570,6 +610,161 @@
     });
   }
 
+  /* --------------------------------------------------------- firmware update --- */
+
+  /*
+   * The device checks the image before it writes a byte of it - chip, product,
+   * version - so nothing here duplicates that. What this half owns is the two
+   * things a browser can do and the device cannot: show how far the upload has
+   * got, and ask a person whether they really meant to install something older.
+   */
+
+  var firmwareBusy = false;
+
+  /** Turns the device's own reason into a sentence, or falls back to it. */
+  function firmwareReason(reason) {
+    if (!reason) { return t('fwFailed'); }
+    var text = t('fwReason.' + reason);
+    return text === 'fwReason.' + reason ? reason : text;
+  }
+
+  function setFirmwareProgress(fraction) {
+    show($('firmwareProgress'), fraction !== null);
+    if ($('firmwareBar') && fraction !== null) {
+      $('firmwareBar').style.width = Math.round(fraction * 100) + '%';
+    }
+  }
+
+  /**
+   * POSTs the file as the raw request body.
+   *
+   * XMLHttpRequest rather than fetch, for one reason: fetch has no upload
+   * progress at all. A megabyte over an access point takes long enough that a
+   * page with no bar looks like a page that has hung.
+   *
+   * No timeout either, unlike api(): this request legitimately takes a minute,
+   * and the device answers only once it has written and verified the image.
+   */
+  function sendFirmware(file, force) {
+    return new Promise(function (resolve) {
+      var request = new XMLHttpRequest();
+      request.open('POST', state.base + '/api/ota' + (force ? '?force=1' : ''));
+      request.setRequestHeader('Content-Type', 'application/octet-stream');
+      if (state.key) { request.setRequestHeader('Authentication-Info', state.key); }
+
+      request.upload.onprogress = function (event) {
+        if (!event.lengthComputable) { return; }
+        setFirmwareProgress(event.loaded / event.total);
+
+        // The last byte is sent long before the device has finished verifying
+        // and activating the image, so the bar reaching the end is not the end.
+        if (event.loaded >= event.total) { setText('firmwareState', t('fwVerifying')); }
+      };
+
+      request.onload = function () {
+        var data = {};
+        try { data = JSON.parse(request.responseText); } catch (e) { data = {}; }
+        setLink('ok');
+        resolve({ status: request.status, ok: request.status >= 200 && request.status < 300,
+                  data: data });
+      };
+
+      request.onerror = function () {
+        setLink('lost');
+        resolve({ status: 0, ok: false, data: {} });
+      };
+
+      request.send(file);
+    });
+  }
+
+  function finishFirmware(result) {
+    firmwareBusy = false;
+    setDisabled('firmwareButton', false);
+
+    if (result.ok) {
+      setFirmwareProgress(null);
+      setText('firmwareState', t('fwDone'));
+
+      // The device is rebooting into Normal, where there is no portal to
+      // answer. Polling it would paint the link red under a message saying all
+      // is well - the same reason the factory reset stops asking.
+      stopPolling();
+      pollTask = null;
+      setDisabled('firmwareButton', true);
+      forgetKey();
+      render();
+      return;
+    }
+
+    setFirmwareProgress(null);
+
+    if (result.status === 401) {
+      forgetKey();
+      checkAuth();
+      setText('firmwareState', t('anon'));
+      return;
+    }
+
+    if (result.status === 0) {
+      setText('firmwareState', t('fwOffline'));
+      return;
+    }
+
+    setText('firmwareState', firmwareReason(result.data.reason));
+  }
+
+  function uploadFirmware() {
+    if (firmwareBusy) { return; }
+
+    var input = $('firmwareFile');
+    var file = input && input.files && input.files[0];
+    if (!file) {
+      setText('firmwareState', t('fwNoFile'));
+      return;
+    }
+
+    firmwareBusy = true;
+    setDisabled('firmwareButton', true);
+    setText('firmwareState', t('fwSending'));
+    setFirmwareProgress(0);
+
+    sendFirmware(file, false).then(function (result) {
+      // A downgrade is refused by default and allowed on purpose. Asking here
+      // rather than sending force=1 from the start is what keeps "older" an
+      // answer somebody has to agree with instead of one nobody ever sees.
+      if (!result.ok && result.data && result.data.reason === 'older version') {
+        var offered = result.data.offered || '?';
+        var current = result.data.current || '?';
+
+        if (window.confirm(t('fwOlderAsk') + '\n\n' + offered + ' ← ' + current)) {
+          setText('firmwareState', t('fwSending'));
+          setFirmwareProgress(0);
+          sendFirmware(file, true).then(finishFirmware);
+          return;
+        }
+      }
+
+      finishFirmware(result);
+    });
+  }
+
+  /** The running version and whether the button may be pressed. */
+  function renderFirmwarePanel() {
+    setText('firmwareTitle', t('fwTitle'));
+    setText('firmwareText', t('fwText'));
+    setText('firmwareFileLabel', t('fwImage'));
+    setText('firmwareButton', t('fwGo'));
+
+    // What is being upgraded FROM. The device refuses a downgrade on its own,
+    // but somebody choosing a file should not have to guess what they are
+    // replacing - and this is already in hand from GET /api/info.
+    setText('firmwareRunning', state.fw ? t('fwRunning') + ': ' + state.fw : '');
+
+    // Admin only, and never while one is already on its way.
+    setDisabled('firmwareButton', firmwareBusy || !isAdmin());
+  }
+
   /* ------------------------------------------------------------ where to talk --- */
 
   /**
@@ -675,6 +870,7 @@
                          : t('signIn'));
 
     setText('changePassButton', t('changePass'));
+    renderFirmwarePanel();
     setText('dangerTitle', t('resetTitle'));
     setText('dangerText', t('dangerText'));
     setText('resetButton', t('resetGo'));
@@ -693,6 +889,12 @@
     on('modalCancel', 'click', closeModal);
     on('modalSubmit', 'click', submitPassword);
     on('changePassButton', 'click', function () { openModal('change'); });
+
+    on('firmwareButton', 'click', uploadFirmware);
+
+    // Clears a stale refusal the moment a different file is chosen, so the
+    // message on screen always belongs to the file in the box.
+    on('firmwareFile', 'change', function () { setText('firmwareState', ''); });
 
     on('resetButton', 'click', openResetModal);
     on('resetCancel', 'click', closeResetModal);

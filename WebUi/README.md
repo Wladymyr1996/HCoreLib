@@ -51,6 +51,12 @@ delete the Components panel. The file says the same thing at the top of itself.
   sleep, reset — are all reasons the key is already dead. When the link returns
   HCore asks what this browser is now rather than assuming, so a device that came
   back factory-reset correctly reports `first`.
+- **Firmware update.** A file picker, an upload with a real progress bar, and
+  the device's own refusal reasons turned into sentences. `fetch` has no upload
+  progress at all, so this one request goes through `XMLHttpRequest`. A
+  downgrade is refused by the device and confirmed by the person before it is
+  retried with `?force=1` — asking here is what keeps "older" an answer somebody
+  has to agree with rather than one nobody ever sees.
 - **Factory reset.** Confirm, a timed progress bar, then "Device reset." and a
   Close button — and the page stops asking. The device is erasing its filesystem
   and rebooting into Normal, where there is no server to answer; retrying there
@@ -122,6 +128,10 @@ All optional; leave out what the device does not have.
 | `#modal`, `#modalTitle`, `#modalText`, `#modalError` | the password dialog |
 | `#passLabel`, `#passInput`, `#modalCancel`, `#modalSubmit` | its field and buttons |
 | `#changePassButton` | opens the dialog in change mode; put it where it belongs |
+| `#firmwarePanel`, `#firmwareTitle`, `#firmwareText` | the update panel |
+| `#firmwareFile`, `#firmwareFileLabel`, `#firmwareButton` | its picker and button |
+| `#firmwareProgress`, `#firmwareBar` | the upload bar |
+| `#firmwareRunning`, `#firmwareState` | the running version, and what just happened |
 | `#dangerPanel`, `#dangerTitle`, `#dangerText`, `#resetButton` | the reset panel |
 | `#resetModal`, `#resetTitle`, `#resetText` | the reset dialog |
 | `#resetProgress`, `#resetBar` | its timed bar |
@@ -132,8 +142,12 @@ All optional; leave out what the device does not have.
 ### The API it expects
 
 `GET /api/auth` · `POST /api/auth` · `POST /api/setAdminPassword` ·
-`POST /api/factoryReset` · `GET /api/info` — served by `Portal/HRestApi` and
-`HAuth`. Anything else is the application's own.
+`POST /api/factoryReset` · `GET /api/info` · `GET`/`POST /api/ota` — served by
+`Portal/HRestApi`, `HAuth` and `HOtaWriter`. Anything else is the application's
+own.
+
+Leave the firmware section out of a device that should not be updated from a
+browser: core.js drives whatever markup is present and assumes none of it.
 
 ## Development panel
 

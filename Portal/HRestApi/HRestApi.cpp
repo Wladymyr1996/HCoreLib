@@ -12,6 +12,13 @@
 
 #include <HAuth/HAuth.hpp>
 #include "HFactoryReset/HFactoryReset.hpp"
+#include "HOtaWriter/HOtaWriter.hpp"
+
+// A chunk smaller than the staging buffer could never complete the header the
+// OTA verdict is reached from, and the upload would stall on its first read.
+// A build is a better place to find that than a bench.
+static_assert(HRESTAPI_OTA_CHUNK_SIZE >= HOTAWRITER_STAGE_BYTES,
+              "HRESTAPI_OTA_CHUNK_SIZE must be at least HOTAWRITER_STAGE_BYTES");
 
 namespace {
 
@@ -23,6 +30,14 @@ constexpr size_t kResponseBufferSize = 192;
 
 /** @brief Longest password accepted, terminator included. */
 constexpr size_t kPasswordBufferSize = 64;
+
+/**
+ * @brief Longest body the OTA routes build, which name two versions and a slot.
+ *
+ * Bigger than kResponseBufferSize because a refusal reports what was offered
+ * beside what is running, and both of those are 32-character fields.
+ */
+constexpr size_t kOtaResponseBufferSize = 320;
 
 httpd_handle_t server = nullptr;
 
@@ -181,6 +196,171 @@ esp_err_t handleInfo(httpd_req_t* raw) {
   return response.json("200 OK", body);
 }
 
+// ---------------------------------------------------------------------------
+// Firmware update
+// ---------------------------------------------------------------------------
+
+/** @brief The name HOtaState answers to in JSON. */
+const char* otaStateText(HOtaState state) noexcept {
+  switch (state) {
+    case HOtaState::Idle:
+      return "idle";
+    case HOtaState::Writing:
+      return "writing";
+    case HOtaState::Done:
+      return "done";
+    case HOtaState::Failed:
+      return "failed";
+  }
+
+  return "unknown";
+}
+
+/**
+ * @brief True when the query string carries `force=1`.
+ *
+ * The deliberate-downgrade override, and the reason it is a query parameter
+ * rather than a header or a body field: the body IS the firmware, so there is
+ * nowhere else in this request to put it.
+ */
+bool wantsForce(httpd_req_t* raw) noexcept {
+  const size_t length = httpd_req_get_url_query_len(raw);
+  if (length == 0 || length >= 64) {
+    return false;
+  }
+
+  char query[64] = "";
+  if (httpd_req_get_url_query_str(raw, query, sizeof(query)) != ESP_OK) {
+    return false;
+  }
+
+  char value[8] = "";
+  if (httpd_query_key_value(query, "force", value, sizeof(value)) != ESP_OK) {
+    return false;
+  }
+
+  return value[0] == '1';
+}
+
+/** @brief The current state of the updater, for a UI to poll. */
+esp_err_t handleOtaStatus(httpd_req_t* raw) {
+  HRestResponse response(raw);
+
+  const HOtaImageInfo& offered = HOtaWriter::offered();
+
+  char body[kOtaResponseBufferSize] = "";
+  std::snprintf(body, sizeof(body),
+                "{\"running\":\"%s\",\"project\":\"%s\",\"slot\":\"%s\",\"slotSize\":%u,"
+                "\"state\":\"%s\",\"written\":%u,\"total\":%u,\"offered\":\"%s\","
+                "\"reason\":\"%s\"}",
+                HOtaWriter::runningVersion(), HOtaWriter::runningProject(),
+                HOtaWriter::slotName(), static_cast<unsigned>(HOtaWriter::slotSize()),
+                otaStateText(HOtaWriter::state()),
+                static_cast<unsigned>(HOtaWriter::written()),
+                static_cast<unsigned>(HOtaWriter::total()), offered.version,
+                HOtaWriter::reason());
+
+  return response.json("200 OK", body);
+}
+
+/**
+ * @brief Takes a firmware image as the raw request body and writes it.
+ *
+ * The body is the `.bin` itself - not JSON, not multipart. A browser sends
+ * exactly that with `fetch(url, {method:'POST', body: file})`, and a multipart
+ * parser on the device would be a parser written for a client that did not need
+ * one.
+ *
+ * HRestRequest caps a body at HRESTREQUEST_MAX_BODY, so this route deliberately
+ * does not use it: it reads the socket itself, a chunk at a time, into a buffer
+ * that is static rather than a local because the server's task stack has to
+ * hold esp_ota's frames as well.
+ */
+esp_err_t handleOtaUpload(httpd_req_t* raw) {
+  HRestRequest request(raw);
+  HRestResponse response(raw);
+
+  // Always a key. This route replaces the firmware, which outranks every other
+  // thing this API can be asked to do.
+  if (!request.isAuthorised()) {
+    return response.unauthorized();
+  }
+
+  const size_t announced = static_cast<size_t>(raw->content_len);
+
+  if (!HOtaWriter::begin(announced, wantsForce(raw))) {
+    char body[kOtaResponseBufferSize] = "";
+    std::snprintf(body, sizeof(body), "{\"status\":\"bad request\",\"reason\":\"%s\"}",
+                  HOtaWriter::reason());
+    return response.json("400 Bad Request", body);
+  }
+
+  // Static: the server's task stack also has to carry esp_ota's frames, and a
+  // four-kilobyte local beside them is what overruns it.
+  static uint8_t chunk[HRESTAPI_OTA_CHUNK_SIZE];
+
+  size_t remaining = announced;
+  bool refused = false;
+
+  while (remaining > 0) {
+    const size_t want = (remaining < sizeof(chunk)) ? remaining : sizeof(chunk);
+    const int received = httpd_req_recv(raw, reinterpret_cast<char*>(chunk),
+                                        static_cast<size_t>(want));
+
+    if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+      // A stalled read, not a dead one - the client is allowed to be slow.
+      continue;
+    }
+    if (received <= 0) {
+      HWarning("upload socket failed after %u bytes",
+               static_cast<unsigned>(announced - remaining));
+      HOtaWriter::abort();
+      return response.badRequest();
+    }
+
+    remaining -= static_cast<size_t>(received);
+
+    // Once refused, the rest is READ AND DISCARDED rather than stopping here.
+    // A server that answers mid-upload leaves the client still sending into a
+    // socket nobody is reading, and what the browser reports then is a network
+    // error rather than the reason the image was turned away. Draining costs a
+    // few seconds over Wi-Fi and buys an error message somebody can act on.
+    if (refused) {
+      continue;
+    }
+
+    if (!HOtaWriter::write(chunk, static_cast<size_t>(received))) {
+      refused = true;
+    }
+  }
+
+  if (!refused && HOtaWriter::finish()) {
+    char body[kOtaResponseBufferSize] = "";
+    std::snprintf(body, sizeof(body), "{\"status\":\"ok\",\"version\":\"%s\",\"slot\":\"%s\"}",
+                  HOtaWriter::offered().version, HOtaWriter::slotName());
+
+    const esp_err_t sent = response.json("200 OK", body);
+
+    // AFTER the answer is on the wire, and not from here: restarting inside a
+    // handler drops the socket before the client has read it, and the client
+    // reports a failure for something that worked. MainTask acts on the flag a
+    // tick later - the same shape as the factory reset.
+    HOtaWriter::requestReboot();
+    return sent;
+  }
+
+  const HOtaImageInfo& offered = HOtaWriter::offered();
+
+  char body[kOtaResponseBufferSize] = "";
+  std::snprintf(body, sizeof(body),
+                "{\"status\":\"bad request\",\"reason\":\"%s\",\"offered\":\"%s\","
+                "\"offeredProject\":\"%s\",\"current\":\"%s\"}",
+                HOtaWriter::reason(), offered.version, offered.projectName,
+                HOtaWriter::runningVersion());
+
+  return response.json("400 Bad Request", body);
+}
+
 esp_err_t handleOptions(httpd_req_t* raw) {
   // A POST carrying `Content-Type: application/json` and an
   // `Authentication-Info` header is not a "simple" request, so a browser sends
@@ -245,6 +425,8 @@ const httpd_uri_t kLibraryRoutes[] = {
      .handler = &handleFactoryReset,
      .user_ctx = nullptr},
     {.uri = "/api/info", .method = HTTP_GET, .handler = &handleInfo, .user_ctx = nullptr},
+    {.uri = "/api/ota", .method = HTTP_GET, .handler = &handleOtaStatus, .user_ctx = nullptr},
+    {.uri = "/api/ota", .method = HTTP_POST, .handler = &handleOtaUpload, .user_ctx = nullptr},
 };
 
 const httpd_uri_t kCatchAllRoutes[] = {

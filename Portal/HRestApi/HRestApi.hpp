@@ -14,6 +14,22 @@
 #endif
 
 /**
+ * How much of a firmware upload is read from the socket at a time, in bytes.
+ *
+ * Held in a static buffer, not on the server task's stack - see
+ * HWEBSERVER_STACK_SIZE. Four kilobytes is one flash page group and a
+ * comfortable socket read; smaller costs more round trips through esp_ota for
+ * no saving worth having, and larger is RAM permanently spent on something that
+ * runs for a few seconds in the life of a device.
+ *
+ * It must stay at or above HOTAWRITER_STAGE_BYTES, or the first chunk cannot
+ * complete the header the verdict is reached from.
+ */
+#ifndef HRESTAPI_OTA_CHUNK_SIZE
+#define HRESTAPI_OTA_CHUNK_SIZE 4096
+#endif
+
+/**
  * @brief The REST API every Hatynka device shares, plus a way in for its own.
  *
  * ## What the library serves
@@ -24,6 +40,8 @@
  * | `POST /api/setAdminPassword` | yes* | `{"status":"ok"}` |
  * | `POST /api/factoryReset` | yes | `{"status":"ok"}`, then the device restarts |
  * | `GET /api/info` | no | `{"name","fw","idf"}` |
+ * | `GET /api/ota` | no | what is running, and how an update in flight is going |
+ * | `POST /api/ota` | yes | the request body IS the firmware image |
  * | `OPTIONS` on any path | no | the CORS preflight every browser sends first |
  * | `GET`/`POST` under `/api` | no | 404, so a mistyped API path answers as the API |
  *

@@ -217,8 +217,15 @@ bool startAccessPoint() noexcept {
 
 #if !HNETWORK_MODE_AP
 
-/** @brief Joins the router named in HCoreLibConfig.h. Debug builds only. */
-bool startStation() noexcept {
+/**
+ * @brief Joins the router named in HCoreLibConfig.h. Debug builds only.
+ *
+ * Named apart from HNetwork::startStation() deliberately: inside a member
+ * function, member lookup would find that one first and the call below would
+ * not compile - in a branch this build does not take, so nobody would notice
+ * until somebody flipped HNETWORK_MODE_AP.
+ */
+bool startConfiguredStation() noexcept {
   if (esp_netif_create_default_wifi_sta() == nullptr) {
     HCritical("could not create the station interface");
     return false;
@@ -269,8 +276,69 @@ bool HNetwork::start() noexcept {
 #if HNETWORK_MODE_AP
   return startAccessPoint();
 #else
-  return startStation();
+  return startConfiguredStation();
 #endif
+}
+
+bool HNetwork::startStation(const char* ssid, const char* passphrase,
+                            uint8_t channel) noexcept {
+  if (ssid == nullptr || ssid[0] == '\0') {
+    HCritical("no SSID to join");
+    return false;
+  }
+
+  if (!startPlatform()) {
+    return false;
+  }
+
+  const wifi_init_config_t initConfig = WIFI_INIT_CONFIG_DEFAULT();
+  if (esp_wifi_init(&initConfig) != ESP_OK) {
+    HCritical("wifi init failed");
+    return false;
+  }
+
+  esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &onEvent, nullptr, nullptr);
+  esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &onEvent, nullptr, nullptr);
+
+  // The node is awake and downloading either way, so the beacon-interval delay
+  // power save would add buys nothing and costs the transfer.
+  esp_wifi_set_ps(WIFI_PS_NONE);
+
+  if (esp_netif_create_default_wifi_sta() == nullptr) {
+    HCritical("could not create the station interface");
+    return false;
+  }
+
+  snprintf(ssidBuffer, sizeof(ssidBuffer), "%s", ssid);
+
+  wifi_config_t config = {};
+  std::strncpy(reinterpret_cast<char*>(config.sta.ssid), ssid,
+               sizeof(config.sta.ssid) - 1);
+  if (passphrase != nullptr) {
+    std::strncpy(reinterpret_cast<char*>(config.sta.password), passphrase,
+                 sizeof(config.sta.password) - 1);
+  }
+
+  // A named channel skips the sweep across all of them, which on a battery node
+  // is seconds of radio. 0 means the master did not know, so scan.
+  if (channel != 0) {
+    config.sta.channel = channel;
+  }
+
+  if (esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK ||
+      esp_wifi_set_config(WIFI_IF_STA, &config) != ESP_OK || esp_wifi_start() != ESP_OK) {
+    HCritical("station failed to start");
+    return false;
+  }
+
+  HInfo("joining '%s'%s...", ssidBuffer, (channel != 0) ? " on a known channel" : "");
+  return true;
+}
+
+void HNetwork::stop() noexcept {
+  esp_wifi_stop();
+  esp_wifi_deinit();
+  setStatus(HNetworkStatus::Down);
 }
 
 HNetworkMode HNetwork::mode() noexcept {

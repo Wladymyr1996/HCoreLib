@@ -50,6 +50,12 @@ bool HWebServer::start() noexcept {
   // rather than silently at the seventh registration.
   config.max_uri_handlers = HWEBSERVER_MAX_ROUTES;
 
+  // Every REST handler runs in the server's own task, and one of them - the
+  // firmware upload - writes to flash and calls into esp_ota. See the comment
+  // on HWEBSERVER_STACK_SIZE for why IDF's 4096 is not enough for that.
+  config.stack_size = HWEBSERVER_STACK_SIZE;
+  config.recv_wait_timeout = HWEBSERVER_RECV_TIMEOUT_S;
+
   const esp_err_t result = httpd_start(&server, &config);
   if (result != ESP_OK) {
     HCritical("could not start on port %d: %s", HWEBSERVER_PORT, esp_err_to_name(result));

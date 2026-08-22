@@ -130,6 +130,18 @@ package "Lifecycle" {
   class HSleep <<control>>
   class HRtcStore <<control>>
   class HAuth <<control>>
+  class HOtaImage <<control>>
+  class HOtaImageInfo <<entity>>
+  class HOtaPolicy <<entity>>
+
+  note bottom of HOtaImage
+    **Depends on nothing at all** - not even ESP-IDF.
+    It parses the application image layout from its
+    own constants, which is what lets the code that
+    decides to overwrite a device's only working
+    firmware be driven by a host test. Same argument
+    that keeps HAuth out of Portal.
+  end note
 }
 
 package "Tasks (ESP32 only)" {
@@ -162,6 +174,8 @@ package "Portal (ESP32 only)" {
   class HRestRequest <<boundary>>
   class HRestResponse <<boundary>>
   class HFactoryReset <<control>>
+  class HOtaWriter <<boundary>>
+  class HOtaPull <<boundary>>
 }
 
 ' --- Values --------------------------------------------------------------
@@ -224,6 +238,12 @@ HSleep ..> HGpioPin : wake source
 HSleep ..> HHookList : before sleep / after wake
 HAuth ..> HConfig : stores the hash
 HAuth ..> HSha256
+' Two halves kept apart on purpose: the info is read off the wire and says what
+' an image IS, the policy is the device's own and says what it will ACCEPT.
+' A UI wants the first without the second, and a test can drive the second over
+' hand-written facts without assembling 288 bytes for every case.
+HOtaImage ..> HOtaImageInfo : states what an image says
+HOtaImage ..> HOtaPolicy : judges it against
 
 ' --- Tasks ---------------------------------------------------------------
 ' The watchdog watches an interface it declares itself, so it never names the
@@ -259,11 +279,22 @@ HRestApi ..> HRestRequest
 HRestApi ..> HRestResponse
 HRestApi ..> HAuth : guards routes
 HRestApi ..> HFactoryReset
+HRestApi ..> HOtaWriter : takes an upload
 HRestRequest ..> HJsonDocument : parses the body
 HRestRequest ..> HAuth
 HFactoryReset ..> HConfig : erases
 HFactoryReset ..> HBootMode : reboots into Normal
 HFactoryReset ..> HHookList
+
+' --- Firmware updates ----------------------------------------------------
+' Two ways in, one writer. Neither entry path knows the other exists, and the
+' rules about what may be installed live in exactly one of these boxes.
+HOtaWriter ..> HOtaImage : judges before erasing
+HOtaWriter ..> HOtaImageInfo : keeps what was offered,\neven when refused
+HOtaWriter ..> HOtaPolicy : builds one per transfer -\nthe two entry paths answer\nthe downgrade question\ndifferently
+HOtaPull ..> HOtaWriter : hands it the bytes
+HOtaPull ..> HNetwork : joins somebody's router
+HOtaPull ..> HTimer : caps the whole attempt
 
 ' ---------------------------------------------------------------------------
 note as Acyclic
@@ -283,11 +314,59 @@ note as Acyclic
   All three were closed by a .cpp rather than a header, so none of them ever
   broke a build - which is exactly what made them worth removing on purpose
   rather than eventually, when one of them stopped being merely a diagram.
+
+  **Both kinds are checked, and that distinction is the point.** A cycle
+  through headers cannot compile, so it is found the day it is written. A cycle
+  that closes through .cpp files compiles perfectly and survives for years -
+  it is only ever found by looking. All three above were the second kind.
+
+  The include graph is acyclic **through headers and through .cpp files**,
+  checked per type, verified rather than asserted.
 end note
 
-' No class in this library has more than one base, so there is no diamond and
-' no virtual inheritance anywhere: every hierarchy above is a chain, at most
-' three deep (HIFont <- HFont<W,H> <- HFont6x8).
+note as Diamond
+  **No diamond, and nothing to solve.**
+
+  Not one class in this library has two bases, and `virtual` inheritance
+  appears nowhere - so the ambiguity a diamond creates, and the vtable cost of
+  fixing it, are both absent by construction rather than by care.
+
+  Every hierarchy here is a CHAIN, at most three deep:
+
+  * HIFont <- HFont<W,H> <- HFont6x8 / HFont8x16 / HFont24x32
+  * HIWatchable <- HTask <- HCaptiveDns
+  * HSSD1306Panel <- HSSD1306
+  * HIFs <- HFsDesktop | HLittleFs   (and HIFile likewise)
+  * HIGpio <- HGpioEsp32 | HGpioDesktop
+  * HILogBackend <- HConsoleLogBackend
+  * HITickable <- HButton
+
+  That is not an accident of taste. This library is built with `-fno-rtti`, so
+  `dynamic_cast` is unavailable and a virtual base would have to be navigated
+  by hand; and it allocates nothing after start-up, where the extra indirection
+  a virtual base adds to every member access is a cost paid on a battery. An
+  interface plus one implementation chain buys everything multiple inheritance
+  would have, and costs neither.
+
+  The OTA classes added nothing here: HOtaImage, HOtaWriter and HOtaPull are
+  static facades with no base class at all.
+end note
+
+' ---------------------------------------------------------------------------
+' Both notes above are mechanically checkable, and were checked. Re-run either
+' after changing an include, from the repository root:
+'
+'   python HCoreLib/tools/checkdeps.py HCoreLib        # add -v for every edge
+'   python HCoreLib/tools/checkdeps.py HAPLib
+'
+' and for the diamond half, which is one grep because the answer is "none":
+'
+'   grep -rnE "^ *class +[A-Za-z0-9_]+ *: *(public|protected|private)" \
+'        --include=*.hpp HCoreLib HAPLib | grep -v 3rdParty
+'
+' Every line it prints should name exactly one base. A comma inside template
+' arguments - HFont<6, 8> - is not a second base and is the one false positive
+' worth expecting.
 ' ---------------------------------------------------------------------------
 
 legend right

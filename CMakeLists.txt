@@ -31,6 +31,7 @@ set(HCORELIB_SRCS
     # file the host compiler will tell us about.
     "HTaskManager/HIWatchable/HIWatchable.cpp"
     "HAuth/HAuth.cpp"
+    "HOtaImage/HOtaImage.cpp"
     "HRtcStore/HRtcStore.cpp"
     "HSleep/HSleep.cpp"
     "HLog/HLog.cpp"

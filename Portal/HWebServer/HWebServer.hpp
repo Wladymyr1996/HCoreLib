@@ -18,6 +18,31 @@
 #endif
 
 /**
+ * Stack for the server's own task, in bytes, where every REST handler runs.
+ *
+ * IDF's default is 4096, which is comfortable for handlers that parse a small
+ * JSON body and answer. It is NOT comfortable for the firmware upload, which
+ * writes to flash from this task and calls into esp_ota - so this is 8192 and
+ * the upload's receive buffer is static rather than a local, because the two
+ * together would overrun either figure.
+ */
+#ifndef HWEBSERVER_STACK_SIZE
+#define HWEBSERVER_STACK_SIZE 8192
+#endif
+
+/**
+ * How long a receive may stall before the socket is given up on, in seconds.
+ *
+ * IDF's default is 5. A firmware upload is a megabyte over an access point that
+ * a person is holding, and a phone that briefly wanders behind a wall must not
+ * cost the whole transfer - so this is longer, and the cost is that a genuinely
+ * dead socket is held that much longer before it is released.
+ */
+#ifndef HWEBSERVER_RECV_TIMEOUT_S
+#define HWEBSERVER_RECV_TIMEOUT_S 15
+#endif
+
+/**
  * @brief The HTTP server: its lifetime, and nothing about what it serves.
  *
  * esp_http_server runs a task of its own, so this class is start and stop rather

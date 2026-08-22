@@ -98,3 +98,4 @@ void runGpioTests() noexcept;
 void runButtonTests() noexcept;
 void runRtcStoreTests() noexcept;
 void runAuthTests() noexcept;
+void runOtaImageTests() noexcept;

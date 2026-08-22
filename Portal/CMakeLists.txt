@@ -24,6 +24,8 @@ idf_component_register(SRCS "HNetwork/HNetwork.cpp"
                             "HCaptiveDns/HCaptiveDns.cpp"
                             "HStaticUi/HStaticUi.cpp"
                             "HFactoryReset/HFactoryReset.cpp"
+                            "HOtaWriter/HOtaWriter.cpp"
+                            "HOtaPull/HOtaPull.cpp"
                             "HRestApi/HRestApi.cpp"
                             "HRestApi/HRestRequest/HRestRequest.cpp"
                             "HRestApi/HRestResponse/HRestResponse.cpp"
@@ -32,6 +34,7 @@ idf_component_register(SRCS "HNetwork/HNetwork.cpp"
                        # the radio and the server themselves.
                        REQUIRES HCoreLib
                                 esp_wifi esp_netif esp_event nvs_flash esp_http_server lwip
-                                esp_app_format)
+                                esp_app_format app_update esp_partition
+                                esp_http_client)
 
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)

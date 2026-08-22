@@ -127,6 +127,36 @@ class HNetwork {
    */
   static bool start() noexcept;
 
+  /**
+   * @brief Joins a named router, whatever HNETWORK_MODE_AP says. Call once.
+   *
+   * The runtime counterpart of start(): that one brings the radio up the way
+   * this device was BUILT, and this brings it up the way it has just been
+   * TOLD to. Ota mode is the caller - a node handed an SSID, a passphrase and a
+   * URL over the mesh has to join a network nothing knew about at build time.
+   *
+   * The compile-time switch is left alone deliberately. It decides what the
+   * portal is, which is a property of the product; this is one boot mode
+   * borrowing the radio for one job, and the two must not be able to disagree.
+   *
+   * No captive DNS: this device is a CLIENT on somebody else's network here,
+   * and answering every name on a router it does not own would be hijacking it.
+   * mDNS still comes up with the address, from the shared event handler - one
+   * record, for the seconds this mode lasts.
+   *
+   * @param ssid Network to join. Empty fails rather than joining anything.
+   * @param passphrase WPA passphrase; empty for an open network.
+   * @param channel The channel it is on, or 0 to scan. Naming it saves a
+   *        battery node seconds of radio it does not have to spend.
+   * @return false when the radio could not be started. Whether it CONNECTED is
+   *         a later question - watch status().
+   */
+  static bool startStation(const char* ssid, const char* passphrase,
+                           uint8_t channel) noexcept;
+
+  /** @brief Stops the radio and frees it. For a mode that is done with it. */
+  static void stop() noexcept;
+
   /** @brief Access point or station, as built. */
   static HNetworkMode mode() noexcept;
 

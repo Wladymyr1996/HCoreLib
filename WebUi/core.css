@@ -274,6 +274,31 @@ select, input {
 
 select:disabled, input:disabled { opacity: 0.5; }
 
+/*
+ * A file input is the one control whose width is decided by the FILE somebody
+ * picked rather than by the design. Left alone, a long firmware filename pushes
+ * the panel wide enough to scroll the whole page sideways on a phone - which is
+ * the one screen this UI is most often opened on.
+ */
+input[type="file"] {
+  padding: 6px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+input[type="file"]::file-selector-button {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 5px 10px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+
 select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---------------------------------------------------------------- buttons --- */

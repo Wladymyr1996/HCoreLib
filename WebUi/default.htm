@@ -205,6 +205,31 @@
        into Normal, where there is no server to answer.
 
        Not one line of application code: core.js owns the whole flow. -->
+  <!-- Firmware update. Above the factory reset because it is the milder of the
+       two irreversible things on this page, and below everything else because
+       it is not what somebody came here to do. Leave the section out entirely
+       on a device that should not be updated from a browser - core.js drives
+       whatever markup is present and never assumes any of it. -->
+  <section class="panel" id="firmwarePanel">
+    <h2 id="firmwareTitle">Firmware update</h2>
+    <p class="hint" id="firmwareText"></p>
+
+    <div class="field">
+      <label for="firmwareFile" id="firmwareFileLabel">Image</label>
+      <input id="firmwareFile" type="file" accept=".bin,application/octet-stream">
+    </div>
+
+    <div class="progress" id="firmwareProgress" hidden>
+      <div class="progress__bar" id="firmwareBar"></div>
+    </div>
+
+    <div class="actions">
+      <button id="firmwareButton" class="button" type="button" disabled>Update</button>
+      <span id="firmwareRunning" class="hint"></span>
+      <span id="firmwareState" class="hint"></span>
+    </div>
+  </section>
+
   <section class="panel panel--danger" id="dangerPanel">
     <h2 id="dangerTitle">Factory reset</h2>
     <p class="hint" id="dangerText"></p>
