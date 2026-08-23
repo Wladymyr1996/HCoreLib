@@ -45,9 +45,9 @@ bool HWebServer::start() noexcept {
   // path nobody ever requests.
   config.uri_match_fn = httpd_uri_match_wildcard;
 
-  // Six: five API routes plus the two fallbacks, rounded up. The default is
-  // eight, but naming it here means adding a route fails loudly at start-up
-  // rather than silently at the seventh registration.
+  // IDF's default is eight, which the library alone exceeds twice over. See the
+  // breakdown on HWEBSERVER_MAX_ROUTES: what fails when this is too small is
+  // whatever registered last, and that is always a catch-all.
   config.max_uri_handlers = HWEBSERVER_MAX_ROUTES;
 
   // Every REST handler runs in the server's own task, and one of them - the

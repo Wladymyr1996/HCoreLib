@@ -10,11 +10,27 @@
 #endif
 
 /**
- * Routes the server will hold. The library registers about eight of its own;
- * the rest is room for an application's.
+ * Routes the server will hold.
+ *
+ * The library registers SIXTEEN of its own, and they are not optional:
+ *
+ *   HRestApi::begin    7   /api/auth x2, setAdminPassword, factoryReset, info,
+ *                          /api/ota x2
+ *   HRestApi::finish   3   the OPTIONS catch-all, and one per method under /api
+ *   HStaticUi          5   /, /index.html, /favicon.ico, /favicon.png, and the
+ *                          GET catch-all that redirects to the portal
+ *   HWebServer         1   the POST catch-all
+ *
+ * Everything above that is the application's. Twenty-four leaves eight, which
+ * is more than any device in the family has wanted.
+ *
+ * Getting this wrong is quiet in the worst way: the handlers that fail are the
+ * ones registered LAST, which are the catch-alls - so the portal still serves
+ * its page, still answers its API, and simply stops raising the sign-in prompt
+ * that makes anybody open it. Each one costs a pointer.
  */
 #ifndef HWEBSERVER_MAX_ROUTES
-#define HWEBSERVER_MAX_ROUTES 16
+#define HWEBSERVER_MAX_ROUTES 24
 #endif
 
 /**

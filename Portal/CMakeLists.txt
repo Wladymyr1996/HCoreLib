@@ -38,3 +38,21 @@ idf_component_register(SRCS "HNetwork/HNetwork.cpp"
                                 esp_http_client)
 
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
+
+# ---------------------------------------------------------------------------
+# The favicon
+#
+# The one asset the library ships rather than the application. Every device in
+# the ecosystem is the same product to a browser - the tab it opens says
+# "Hatynka", not "this particular thermometer" - so the bytes live here and
+# HStaticUi serves them from a route no application registers or can replace.
+#
+# A PNG, embedded as it is: it is under a kilobyte and already compressed, so
+# gzipping it would cost a step and save nothing.
+#
+# RENAME_TO fixes the linker symbol, which otherwise comes from the file name
+# alone - an application that embeds a favicon.png of its own would collide with
+# this one at link time.
+# ---------------------------------------------------------------------------
+target_add_binary_data(${COMPONENT_LIB} "HStaticUi/favicon.png" BINARY
+                       RENAME_TO hcore_favicon_png)

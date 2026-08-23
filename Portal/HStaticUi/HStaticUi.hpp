@@ -12,8 +12,13 @@
  *
  * The mechanism is shared; **the page is not**. Every device in the ecosystem
  * has a settings mode, and every one of them has its own interface to put in it,
- * so this class holds no bytes of its own - the application hands it a page and
- * this decides how it reaches a browser.
+ * so the application hands it a page and this decides how it reaches a browser.
+ *
+ * The one exception is the favicon, and it is the exception for the opposite
+ * reason: to a browser every device in the ecosystem is the same product, and
+ * the icon on the tab says so. Those bytes are the library's, embedded by this
+ * component and served from `/favicon.ico` and `/favicon.png` - there is no
+ * setter, and an application has nothing to register. See *The favicon* below.
  *
  * @code
  *   extern const uint8_t kStart[] asm("_binary_webui_html_gz_start");
@@ -28,6 +33,18 @@
  * quarter of the flash, a quarter of the radio time, and no CPU at all, because
  * the browser was always going to do that work. `HCoreLib/tools/packui.py`
  * produces the file; an application's build embeds it.
+ *
+ * ## The favicon is the library's, and cannot be replaced
+ * `HCoreLib/Portal/HStaticUi/favicon.png` is embedded into this component and
+ * answered at both `/favicon.ico` and `/favicon.png`. The `.ico` spelling is the
+ * one that matters: a browser asks for it unprompted, so the icon appears on a
+ * page whose markup never mentions it - including one an application wrote
+ * before this existed.
+ *
+ * Both are registered ahead of the catch-all, or the redirect below would
+ * swallow them and hand a browser the page where it expected a picture. Unlike
+ * the page they are sent with a `Cache-Control` that permits caching: the icon
+ * changes only with a firmware update, and a day-old copy is still right.
  *
  * ## The redirect is what makes a captive portal appear
  * Every unclaimed GET is answered with a 302 to the page. A phone that has just
@@ -65,15 +82,17 @@ class HStaticUi {
   static bool hasPage() noexcept;
 
   /**
-   * @brief Registers `/`, `/index.html` and the catch-all redirect.
+   * @brief Registers `/`, `/index.html`, both favicon paths and the catch-all.
    *
    * Call AFTER HRestApi::finish(), so the API's own paths are claimed first:
    * registration order is matching order, and this one ends in a wildcard.
    *
    * With no page set, `/` answers 503 rather than pretending - a device whose
    * build forgot to embed one should say so, not 404 as though the path were
-   * wrong.
-   * @return false if a route could not be registered.
+   * wrong. The favicon is always there either way: it is the library's.
+   *
+   * @return false if a route could not be registered, which nearly always means
+   *         HWEBSERVER_MAX_ROUTES is too small for the routes this build wants.
    */
   static bool registerRoutes(httpd_handle_t server) noexcept;
 };
