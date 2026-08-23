@@ -24,6 +24,10 @@ set(HCORELIB_SRCS
     "HGpioManager/HGpioManager.cpp"
     "HGpioManager/HGpioPin/HGpioPin.cpp"
     "HGpioManager/HIGpio/HIGpio.cpp"
+    "HAdcManager/HAdcManager.cpp"
+    "HAdcManager/HAdcBackend/HAdcBackend.cpp"
+    "HAdcManager/HAdcChannel/HAdcChannel.cpp"
+    "HAdcManager/HIAdc/HIAdc.cpp"
     "HITickable/HITickable.cpp"
     # HIWatchable is what HTaskManager watches. Its only implementer is
     # target-only, but the interface itself is platform-independent, so it is
@@ -41,6 +45,7 @@ set(HCORELIB_SRCS
     "HJson/HJsonPool.cpp"
     "HJson/HJsonValue.cpp"
     "HValue/HValue.cpp"
+    "Utils/HCurve/HCurve.cpp"
     "Utils/HSha256/HSha256.cpp"
     "Utils/HSystemUtils/HSystemUtils.cpp"
     "Utils/HTimer/HTimer.cpp")
@@ -53,6 +58,7 @@ if(ESP_PLATFORM)
        "HFs/LittleFs/HLittleFs.cpp"
        "HFs/LittleFs/HLittleFsFile.cpp"
        "HGpioManager/HGpioEsp32/HGpioEsp32.cpp"
+       "HAdcManager/HAdcEsp32/HAdcEsp32.cpp"
        # HTask wraps a FreeRTOS task, which the host has no equivalent of.
        "HTask/HTask.cpp"
        "HTaskManager/HTaskManager.cpp")
@@ -60,7 +66,8 @@ else()
   list(APPEND HCORELIB_SRCS
        "HFs/Desktop/HFsDesktop.cpp"
        "HFs/Desktop/HFsDesktopFile.cpp"
-       "HGpioManager/HGpioDesktop/HGpioDesktop.cpp")
+       "HGpioManager/HGpioDesktop/HGpioDesktop.cpp"
+       "HAdcManager/HAdcDesktop/HAdcDesktop.cpp")
 endif()
 
 # "." serves the root <HCoreLib.h> as well as <HLog/HLog.hpp>,
@@ -142,7 +149,7 @@ if(ESP_PLATFORM)
                          # Private: esp_timer for the millisecond clock,
                          # esp_system only for esp_restart(), esp_driver_gpio
                          # for the pads.
-                         PRIV_REQUIRES esp_timer esp_system esp_driver_gpio)
+                         PRIV_REQUIRES esp_timer esp_system esp_driver_gpio esp_adc)
 
   target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
 

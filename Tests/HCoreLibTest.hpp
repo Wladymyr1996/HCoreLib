@@ -99,3 +99,4 @@ void runButtonTests() noexcept;
 void runRtcStoreTests() noexcept;
 void runAuthTests() noexcept;
 void runOtaImageTests() noexcept;
+void runAdcTests() noexcept;

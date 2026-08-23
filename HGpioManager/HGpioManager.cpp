@@ -7,6 +7,12 @@
 // the file's own documentation for the row format.
 #include <HGpioConfig.h>
 
+// A board table written before analog pins existed declares no such list, and
+// must still build. An empty list costs this file nothing.
+#ifndef HGPIO_ANALOG_PINS
+#define HGPIO_ANALOG_PINS(PIN)
+#endif
+
 // Which backend this is, is decided in HGpioBackend.cpp. The platform headers
 // below are still needed here for the pad limits the board table is validated
 // against - not for the object itself.
@@ -56,8 +62,28 @@ constexpr HGpioPinDesc kPins[kTableStorage] = {
     HGPIO_CONFIGURABLE_PINS(HGPIO_MAKE_PIN)
 };
 
+/**
+ * @brief One ANALOG row reduced to its pad number, and nothing else.
+ *
+ * This module knows nothing about attenuation, dividers or converters - that is
+ * HAdcManager's, and it does not include a single header of it. What it does
+ * know, and what nothing else can, is that a pad has ONE owner: the analog rows
+ * are declared in the same board table precisely so this check can see them
+ * beside the digital ones.
+ *
+ * A board with no analog pins expands to nothing and costs this file nothing.
+ */
+#define HGPIO_ANALOG_NUMBER(name_, number_, atten_, divider_) number_,
+
+constexpr size_t kAnalogPinCount = 0 HGPIO_ANALOG_PINS(HGPIO_COUNT_PIN);
+
+constexpr size_t kAnalogStorage = (kAnalogPinCount > 0) ? kAnalogPinCount : 1;
+
+constexpr int kAnalogNumbers[kAnalogStorage] = {HGPIO_ANALOG_PINS(HGPIO_ANALOG_NUMBER)};
+
 #undef HGPIO_COUNT_PIN
 #undef HGPIO_MAKE_PIN
+#undef HGPIO_ANALOG_NUMBER
 
 // ---------------------------------------------------------------------------
 // Compile-time validation of the board table.
@@ -104,7 +130,14 @@ constexpr bool allOutputsCanDrive() {
   return true;
 }
 
-/** @brief True if no pad is claimed by two rows. */
+/**
+ * @brief True if no pad is claimed by two rows, in ANY of the three lists.
+ *
+ * Spanning all three is the whole reason the analog pins are declared in the
+ * same board table. gpio_config() on a pad the converter owns tears the ADC off
+ * it, and the reverse is just as true - so "the same pad twice" has to mean
+ * across every list, not within each one.
+ */
 constexpr bool allNumbersUnique() {
   for (size_t i = 0; i < kPinCount; ++i) {
     for (size_t j = i + 1; j < kPinCount; ++j) {
@@ -113,6 +146,21 @@ constexpr bool allNumbersUnique() {
       }
     }
   }
+
+  for (size_t i = 0; i < kAnalogPinCount; ++i) {
+    for (size_t j = i + 1; j < kAnalogPinCount; ++j) {
+      if (kAnalogNumbers[i] == kAnalogNumbers[j]) {
+        return false;
+      }
+    }
+
+    for (size_t j = 0; j < kPinCount; ++j) {
+      if (kAnalogNumbers[i] == kPins[j].number) {
+        return false;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -121,7 +169,9 @@ static_assert(allNumbersValid(),
 static_assert(allOutputsCanDrive(),
               "HGpioConfig.h declares an Output on a pad that cannot drive one");
 static_assert(allNumbersUnique(),
-              "HGpioConfig.h claims the same GPIO number twice - two names cannot own one pad");
+              "HGpioConfig.h claims the same GPIO number twice - two names cannot own one pad. "
+              "This spans the fixed, configurable AND analog lists: a digital pin and an "
+              "analog one cannot share a pad either");
 
 /** @brief strcmp for pin names, without dragging in <cstring> for four lines. */
 bool namesEqual(const char* a, const char* b) noexcept {

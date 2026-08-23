@@ -66,6 +66,8 @@ package "Values" {
   class HTimer <<entity>>
   class HHookList <<entity>>
   class HSha256 <<control>>
+  class HCurve <<control>>
+  class HCurvePoint <<entity>>
   class HSystemUtils <<boundary>>
 
   note bottom of HSystemUtils
@@ -92,6 +94,29 @@ package "Storage" {
   class HFsDesktopFile <<boundary>>
   class HLittleFs <<boundary>>
   class HLittleFsFile <<boundary>>
+}
+
+package "ADC" {
+  class HAdcManager <<control>>
+  class HAdcChannel <<boundary>>
+  class HAdcBackend <<boundary>>
+  class HIAdc <<boundary>>
+  class HAdcEsp32 <<boundary>>
+  class HAdcDesktop <<boundary>>
+  class HAdcPinDesc <<entity>>
+
+  note bottom of HAdcManager
+    A module of its own rather than a mode on
+    HGpioManager: HIGpio speaks in LEVELS, and
+    attenuation, calibration and millivolts have
+    nowhere to live behind a bool.
+
+    But the board TABLE is still one table -
+    HGpioConfig.h declares these rows too, so
+    HGpioManager's duplicate-pad static_assert
+    can see a divider and a button claiming
+    the same pad.
+  end note
 }
 
 package "GPIO" {
@@ -203,6 +228,22 @@ HIFs <|.. HFsDesktop
 HIFs <|.. HLittleFs
 HIFile <|.. HFsDesktopFile
 HIFile <|.. HLittleFsFile
+
+' --- ADC -----------------------------------------------------------------
+' The same shape as GPIO below, and for the same reasons: the channel asks the
+' BACKEND for the converter, not the manager, so the part never reaches back for
+' the whole. HAdcManager is the only thing that reads the board table.
+HAdcManager ..> HAdcPinDesc : owns the analog table
+HAdcManager ..> HAdcChannel : hands out
+HAdcManager ..> HAdcBackend
+HAdcChannel --> HAdcPinDesc : one declared row
+HAdcChannel ..> HAdcBackend : converts through
+HAdcBackend ..> HIAdc : the one compiled in
+HIAdc <|.. HAdcEsp32
+HIAdc <|.. HAdcDesktop
+
+' --- Values --------------------------------------------------------------
+HCurve ..> HCurvePoint : reads a table of
 
 ' --- GPIO ----------------------------------------------------------------
 ' The pin asks HGpioBackend, not the manager. A pin needs the PADS, and going

@@ -195,6 +195,7 @@ int main() {
   runRtcStoreTests();
   runAuthTests();
   runOtaImageTests();
+  runAdcTests();
 
   return HCoreLibTest::report();
 }
