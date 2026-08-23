@@ -65,8 +65,14 @@ delete the Components panel. The file says the same thing at the top of itself.
 - **Translation.** A dictionary of its own for the chrome, `addStrings()` for
   the application's, and `setLanguage()` so an unsaved select takes effect
   immediately.
-- **One poll timer**, stopped while the tab is hidden. One, not many: the device
-  serving the page is an access point running off a battery.
+- **Tabs.** Declared in markup, not registered in code: a `.tab` button naming a
+  `data-tab`, and any number of elements carrying the matching `data-pane`. The
+  clicks, the arrow keys, the labels, the `aria` state and the URL hash are all
+  handled. A page with no `.tab` buttons has no tabs and nothing changes.
+- **One poll timer**, stopped while the browser tab is hidden — and, if it was
+  given a tab name, while a different one is showing. One, not many: the device
+  serving the page is an access point running off a battery, and readings on a
+  dashboard have no reason to be fetched while somebody is reading the settings.
 - **Where to talk.** Same-origin when the device served the page; the `?device=`
   query, `localStorage`, or `config.json` when it did not — see *Development
   panel* below.
@@ -86,6 +92,7 @@ delete the Components panel. The file says the same thing at the top of itself.
 HCore.addStrings({ en: { … }, uk: { … } });   // your words; same id overrides core's
 HCore.onRender(render);                        // redraw whatever you own
 HCore.onStatus(setStatus);                     // where a short sentence goes
+HCore.onTab(function (name) { … });            // optional: the showing tab changed
 HCore.begin(start);                            // resolve the device, then boot
 ```
 
@@ -106,10 +113,12 @@ different device re-runs it, and only the application knows what its boot is.
 | `checkAuth()` | ask the device what this browser is |
 | `openPasswordChange()` | the change-password modal, for your own button |
 | `loadInfo()` | firmware version into the footer |
-| `poll(task, ms)` | the page's one recurring request; replaces any previous |
+| `poll(task, ms, tab)` | the page's one recurring request; replaces any previous. `tab` optional: run it only while that tab shows |
+| `showTab(name)` | show a tab by its `data-tab` name |
+| `tab()` | which tab is showing, or `null` on a page with none |
 | `render()` | redraw the chrome, then call your `onRender` |
 | `begin(start)` | resolve the device, wire the shell, run `start` |
-| `state` | `base`, `key`, `auth`, `link`, `lang`, `fw` — read, do not write |
+| `state` | `base`, `key`, `auth`, `link`, `lang`, `fw`, `tab` — read, do not write |
 | `$`, `show`, `setText`, `on`, `setDisabled`, `setLoading` | null-tolerant DOM |
 
 Every DOM helper tolerates a missing element, and so does everything HCore draws.
@@ -123,6 +132,9 @@ All optional; leave out what the device does not have.
 
 | Element | Is |
 | --- | --- |
+| `.bar__row` | the header's top row; the tab strip is its sibling |
+| `.tab[data-tab][data-text]` | one tab: its name, and the dictionary id of its label |
+| `[data-pane]` | shown while the tab of that name is; repeat it to group panels |
 | `#linkDot` | the link LED |
 | `#authChip`, `#authChipText` | the session chip; the whole label is the button |
 | `#modal`, `#modalTitle`, `#modalText`, `#modalError` | the password dialog |
@@ -148,6 +160,57 @@ own.
 
 Leave the firmware section out of a device that should not be updated from a
 browser: core.js drives whatever markup is present and assumes none of it.
+
+
+## Tabs
+
+```html
+<header class="bar">
+  <div class="bar__row"> … brand, LED, chip … </div>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" type="button" role="tab" data-tab="dashboard" data-text="tabDashboard">Dashboard</button>
+    <button class="tab" type="button" role="tab" data-tab="settings"  data-text="tabSettings">Settings</button>
+  </nav>
+</header>
+
+<main>
+  <section class="cards" data-pane="dashboard" role="tabpanel"> … </section>
+  <section class="panel" data-pane="settings"  role="tabpanel"> … </section>
+  <section class="panel" data-pane="settings"> … </section>   <!-- same tab -->
+</main>
+```
+
+That is the whole of it. There is no list of tabs in any script: the buttons in
+the markup *are* the list, in strip order, and `data-text` is the dictionary id
+their labels are drawn from so the strip changes language with everything else.
+
+**Several panes may share one `data-pane`.** A tab does not need a wrapper
+element around what it shows, and adding one only to satisfy the machinery would
+put a box in the markup that means nothing on the screen.
+
+**The showing tab lives in the URL hash** — `#settings`. It survives a reload, it
+can be linked to, and it costs no storage on a device that has little. An unknown
+name falls back to the first tab rather than showing nothing: the hash is
+something anybody can type, and a bookmark outlives a renamed tab.
+
+**Anything outside a `[data-pane]` is always visible** — the header, the footer
+version, the development panel, and the modals.
+
+**The strip is one stop for the Tab key**, with Left/Right walking it (wrapping
+both ways) and Home/End jumping to its ends — a roving `tabindex`, because a row
+of five buttons that each need a press of Tab to walk past is a row that gets
+walked past.
+
+**Give `poll()` a tab name** and it runs only while that tab shows, resuming with
+an immediate request the moment it comes back:
+
+```js
+HCore.poll(function () { loadValues(false); }, 10000, 'dashboard');
+```
+
+A page with no `.tab` buttons has no tabs, `HCore.tab()` is `null`, every
+`[data-pane]` stays visible and an unscoped `poll()` behaves exactly as before.
 
 ## Development panel
 

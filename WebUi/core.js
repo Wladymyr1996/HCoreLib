@@ -46,17 +46,20 @@
     link: 'wait',       // 'wait' | 'ok' | 'lost'
     lang: 'en',         // What the page is currently DRAWN in - see setLanguage.
     modalMode: 'signin',// 'signin' | 'first' | 'change'
-    fw: null            // Firmware version, from /api/info.
+    fw: null,           // Firmware version, from /api/info.
+    tab: null           // Which tab is showing; null when the page has none.
   };
 
   /* What the application asked to be told about. All optional. */
   var hooks = {
     render: null,       // Redraw everything the app owns.
-    status: null        // A short sentence for wherever the app shows those.
+    status: null,       // A short sentence for wherever the app shows those.
+    tab: null           // The showing tab changed.
   };
 
   var appStart = null;  // The app's boot, re-run when the dev panel changes device.
   var pollTask = null;
+  var pollTab = null;   // Poll only while this tab shows; null means always.
   var pollMs = 0;
   var pollTimer = null;
 
@@ -840,23 +843,218 @@
   }
 
   /**
+   * Is there any reason to be asking the device anything right now?
+   *
+   * Three ways for the answer to be no, and they are the same answer: nobody is
+   * looking. The tab is hidden, or the page is showing a different one from the
+   * tab the readings are on. A device serving this page is an access point
+   * running off a battery, and a request nobody will read is not free.
+   */
+  function pollWanted() {
+    if (!pollTask) { return false; }
+    if (document.hidden) { return false; }
+    if (pollTab && state.tab && pollTab !== state.tab) { return false; }
+    return true;
+  }
+
+  /**
+   * Starts the timer if it should be running and is not.
+   *
+   * Fires once immediately, because this is only ever called on the way BACK -
+   * a tab shown again, a window uncovered - and the first thing somebody
+   * returning wants is a fresh number, not one up to ten seconds old.
+   */
+  function resumePolling() {
+    if (pollTimer || !pollWanted()) { return; }
+
+    pollTask();
+    pollTimer = setInterval(pollTask, pollMs);
+  }
+
+  /** Whichever of the two the current state calls for. */
+  function applyPolling() {
+    if (pollWanted()) { resumePolling(); } else { stopPolling(); }
+  }
+
+  /**
    * The page's one recurring request.
    *
    * One, not many: a device serving this page is an access point running off a
    * battery, and every timer an application forgets to cancel is paid for in
    * milliamps. Calling this again replaces whatever was running.
+   *
+   * @param tabId optional - poll only while that tab is the one showing.
+   *              Readings on a dashboard have no reason to be fetched while
+   *              somebody is reading the settings.
+   *
+   * Deliberately does NOT fire immediately: the application's own boot decides
+   * when the first request goes out, and firing here as well would double it.
    */
-  function poll(task, intervalMs) {
+  function poll(task, intervalMs, tabId) {
     stopPolling();
+
     pollTask = task;
     pollMs = intervalMs;
-    pollTimer = setInterval(task, intervalMs);
+    pollTab = tabId || null;
+
+    if (pollWanted()) { pollTimer = setInterval(task, intervalMs); }
+  }
+
+  /* --------------------------------------------------------------------- tabs --- */
+
+  /*
+   * Tabs are declared in markup, not registered in code.
+   *
+   *   <button class="tab" data-tab="settings" data-text="tabSettings">Settings</button>
+   *   <section data-pane="settings"> ... </section>
+   *
+   * `data-tab` names it, `data-pane` is what that name shows, and `data-text`
+   * is the dictionary id its label is drawn from - so the strip changes language
+   * with everything else. More than one pane may carry the same `data-pane`,
+   * which is how a tab holds several panels without a wrapper around them.
+   *
+   * A page with no `.tab` buttons has no tabs and nothing here does anything.
+   * That is not a special case in the code, it just falls out: there is nothing
+   * to hide, because hiding is driven by the buttons that exist.
+   */
+
+  function tabButtons() {
+    return Array.prototype.slice.call(document.querySelectorAll('.tab[data-tab]'));
+  }
+
+  function tabPanes() {
+    return Array.prototype.slice.call(document.querySelectorAll('[data-pane]'));
+  }
+
+  /** The names in strip order, so "the first tab" has a meaning. */
+  function tabNames() {
+    return tabButtons().map(function (button) { return button.getAttribute('data-tab'); });
+  }
+
+  /**
+   * Shows one tab and tells the application.
+   *
+   * An unknown name falls back to the first rather than showing nothing: it
+   * arrives from the URL hash, which anybody can type and a stale bookmark can
+   * outlive a renamed tab.
+   */
+  function showTab(name) {
+    var names = tabNames();
+    if (!names.length) { return; }
+
+    if (names.indexOf(name) === -1) { name = names[0]; }
+    if (state.tab === name) { return; }
+
+    state.tab = name;
+    renderTabs();
+    rememberTab(name);
+
+    // A tab nobody is looking at has no reason to be polled - see pollWanted().
+    applyPolling();
+
+    if (hooks.tab) { hooks.tab(name); }
+  }
+
+  /** Applies the current tab to the strip and the panes. */
+  function renderTabs() {
+    var buttons = tabButtons();
+    if (!buttons.length) { return; }
+
+    buttons.forEach(function (button) {
+      var on = button.getAttribute('data-tab') === state.tab;
+      var id = button.getAttribute('data-text');
+
+      button.classList.toggle('tab--on', on);
+      button.setAttribute('aria-selected', on ? 'true' : 'false');
+
+      // Roving tabindex: the strip is ONE stop for the Tab key, and the arrow
+      // keys move within it. A row of five buttons that each need a press of
+      // Tab to walk past is a row that gets walked past.
+      button.tabIndex = on ? 0 : -1;
+
+      if (id) { button.textContent = t(id); }
+    });
+
+    tabPanes().forEach(function (pane) {
+      pane.hidden = pane.getAttribute('data-pane') !== state.tab;
+    });
+  }
+
+  /*
+   * The showing tab lives in the URL hash.
+   *
+   * It survives a reload, it can be linked to - "open #settings and look at the
+   * firmware panel" is a sentence somebody can act on - and it costs no storage
+   * on a device that has little. replaceState rather than assignment, so a
+   * morning of switching tabs does not bury the Back button.
+   */
+  function tabFromHash() {
+    return (location.hash || '').replace(/^#/, '') || null;
+  }
+
+  function rememberTab(name) {
+    if (tabFromHash() === name) { return; }
+
+    try {
+      history.replaceState(null, '', '#' + name);
+    } catch (e) {
+      location.hash = name;   // no history API, or a file:// page that refuses
+    }
+  }
+
+  /** Left and right walk the strip; Home and End jump to its ends. */
+  function onTabKey(event) {
+    var names = tabNames();
+    var at = names.indexOf(state.tab);
+    if (at === -1) { return; }
+
+    // null, not -1, for "some other key": ArrowLeft on the first tab computes
+    // -1 legitimately, and a sentinel that collides with a real answer is a
+    // wrap that silently does nothing.
+    var to = event.key === 'ArrowRight' ? at + 1
+           : event.key === 'ArrowLeft' ? at - 1
+           : event.key === 'Home' ? 0
+           : event.key === 'End' ? names.length - 1
+           : null;
+
+    if (to === null) { return; }
+
+    event.preventDefault();
+    showTab(names[(to + names.length) % names.length]);   // wraps, both ways
+
+    // Moving the focus with it, or the next arrow press starts over from a
+    // button that is no longer the one showing.
+    var moved = tabButtons()[names.indexOf(state.tab)];
+    if (moved && moved.focus) { moved.focus(); }
+  }
+
+  function wireTabs() {
+    var buttons = tabButtons();
+    if (!buttons.length) { return; }
+
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        showTab(button.getAttribute('data-tab'));
+      });
+      button.addEventListener('keydown', onTabKey);
+    });
+
+    // Somebody edited the hash, or used Back onto a page that had one.
+    window.addEventListener('hashchange', function () {
+      showTab(tabFromHash() || tabNames()[0]);
+    });
+
+    // state.tab is null here, so this always lands somewhere: the hash if it
+    // names a tab, the first one if it does not.
+    state.tab = null;
+    showTab(tabFromHash());
   }
 
   /* ------------------------------------------------------------------- draw --- */
 
   /** Everything the shared chrome owns, in whatever language is current. */
   function renderShell() {
+    renderTabs();
     renderAuthChip();
     renderLink();
     renderFooter();
@@ -885,6 +1083,8 @@
   /* ------------------------------------------------------------------- boot --- */
 
   function wire() {
+    wireTabs();
+
     on('authChip', 'click', onChipClick);
     on('modalCancel', 'click', closeModal);
     on('modalSubmit', 'click', submitPassword);
@@ -912,17 +1112,9 @@
     });
 
     // Polling a device nobody is looking at is a request every few seconds for
-    // nothing - and on a battery-powered access point, that is not free.
-    document.addEventListener('visibilitychange', function () {
-      if (!pollTask) { return; }
-
-      if (document.hidden) {
-        stopPolling();
-      } else if (!pollTimer) {
-        pollTask();
-        pollTimer = setInterval(pollTask, pollMs);
-      }
-    });
+    // nothing - and on a battery-powered access point, that is not free. The
+    // showing tab is the other half of that question; both live in pollWanted().
+    document.addEventListener('visibilitychange', applyPolling);
   }
 
   /**
@@ -974,10 +1166,19 @@
     render: render,
     begin: begin,
 
+    /** Show a tab by its `data-tab` name. */
+    showTab: showTab,
+
+    /** Which tab is showing, or null on a page that has none. */
+    tab: function () { return state.tab; },
+
     /** Redraw whatever the application owns; called after every core change. */
     onRender: function (callback) { hooks.render = callback; },
 
     /** Where the application shows a short sentence: "Signed out.", and such. */
-    onStatus: function (callback) { hooks.status = callback; }
+    onStatus: function (callback) { hooks.status = callback; },
+
+    /** The showing tab changed. Passed the new one's name. */
+    onTab: function (callback) { hooks.tab = callback; }
   };
 })();

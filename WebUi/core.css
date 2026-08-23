@@ -63,12 +63,17 @@ main {
 
 /* ---------------------------------------------------------------- top bar --- */
 
+/*
+ * The bar is the sticky container, not the row.
+ *
+ * Its row and its tab strip scroll away and stick together, which is the whole
+ * reason they share one element: a tab strip stuck to the bottom of a separate
+ * sticky header has to be told that header's height, and a hard-coded pixel
+ * count is wrong the first time somebody lengthens the brand.
+ *
+ * A page with no tabs writes no strip and looks exactly as it did.
+ */
 .bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--panel-edge);
   position: sticky;
@@ -76,9 +81,70 @@ main {
   z-index: 5;
 }
 
+.bar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
 .brand { font-weight: 600; letter-spacing: 0.02em; }
 
 .bar__right { display: flex; align-items: center; gap: 10px; }
+
+/* ------------------------------------------------------------------ tabs --- */
+
+/*
+ * Underlines rather than boxes: a tab strip on a phone is four or five words
+ * that have to stay readable, and a box around each one spends the width on
+ * borders instead.
+ *
+ * It scrolls sideways when the words do not fit, without a scrollbar drawn
+ * across the bottom of the header - the overflowing tab is visible at the edge,
+ * which is the affordance.
+ */
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 9px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab--on { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Inset, because the strip's own bottom border would clip an outset ring. */
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tab { transition: none; }
+}
+
+/*
+ * A pane that is not showing is `hidden`, and `hidden` alone loses to any rule
+ * that sets a display - which several of these panes have. Saying it here means
+ * an application never has to remember that.
+ */
+[data-pane][hidden] { display: none; }
 
 /* --------------------------------------------------------------- link LED --- */
 

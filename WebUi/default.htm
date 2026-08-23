@@ -25,7 +25,7 @@
   3. Move the script block at the foot of this file into `WebUi/app.js` and
      load it after core.js. It is inline HERE only so that this file is one
      thing you can read top to bottom.
-  4. Delete the Components panel. It is a catalogue, not a feature.
+  4. Delete the Components panel and its tab. It is a catalogue, not a feature.
   5. Add the four sources to your `App/CMakeLists.txt` DEPENDS list.
 
   See README.md for the whole of HCore's surface and the ids it drives.
@@ -45,20 +45,35 @@
      =================================================================== -->
 
 <header class="bar">
-  <div class="brand">Hatynka&nbsp;Device</div>
+  <div class="bar__row">
+    <div class="brand">Hatynka&nbsp;Device</div>
 
-  <div class="bar__right">
-    <!-- Whether THIS PAGE can reach the device. Not the device's own radio -
-         from here those are the same question, and this is the one the person
-         looking at a stale number needs answered. -->
-    <span id="linkDot" class="led led--wait" role="status" aria-live="polite" title=""></span>
+    <div class="bar__right">
+      <!-- Whether THIS PAGE can reach the device. Not the device's own radio -
+           from here those are the same question, and this is the one the person
+           looking at a stale number needs answered. -->
+      <span id="linkDot" class="led led--wait" role="status" aria-live="polite" title=""></span>
 
-    <!-- The whole label is the button: unauthorised opens the login modal, and
-         "Admin" opens it again to log out. One target, both states. -->
-    <button id="authChip" class="chip chip--busy" type="button">
-      <span id="authChipText">…</span>
-    </button>
+      <!-- The whole label is the button: unauthorised opens the login modal, and
+           "Admin" opens it again to log out. One target, both states. -->
+      <button id="authChip" class="chip chip--busy" type="button">
+        <span id="authChipText">…</span>
+      </button>
+    </div>
   </div>
+
+  <!-- TABS. Declared here and nowhere else: `data-tab` names one, `data-text`
+       is the dictionary id its label is drawn from, and every element carrying
+       a matching `data-pane` below is what it shows. core.js does the clicking,
+       the arrow keys, the URL hash and the hiding.
+
+       Delete this strip and the page still works - every pane simply shows at
+       once, which is what a device with one screenful of settings should do. -->
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" type="button" role="tab" data-tab="dashboard" data-text="tabDashboard">Dashboard</button>
+    <button class="tab" type="button" role="tab" data-tab="settings" data-text="tabSettings">Settings</button>
+    <button class="tab" type="button" role="tab" data-tab="components" data-text="tabComponents">Components</button>
+  </nav>
 </header>
 
 <main>
@@ -70,14 +85,14 @@
 
   <!-- Hello world. No device needed: it is drawn from the dictionary, so it
        proves the page is alive and changes language with the select below. -->
-  <section class="panel">
+  <section class="panel" data-pane="dashboard" role="tabpanel">
     <h2 id="helloTitle">Hello, world</h2>
     <p class="modal__text" id="helloText"></p>
   </section>
 
   <!-- Two readings from GET /api/values, converted at the edge by HCore.units.
        Dashes until the first answer arrives, and dashes again if it stops. -->
-  <section class="cards" id="dashboard">
+  <section class="cards" id="dashboard" data-pane="dashboard">
     <article class="card">
       <h2 id="tempLabel">Temperature</h2>
       <p class="value"><span id="tempValue" class="skeleton">&nbsp;</span><span id="tempUnit" class="unit"></span></p>
@@ -89,7 +104,7 @@
     </article>
   </section>
 
-  <p class="hint" id="updatedHint">&nbsp;</p>
+  <p class="hint" id="updatedHint" data-pane="dashboard">&nbsp;</p>
 
   <!-- Settings. Visible to everyone, editable only with a key, so somebody who
        has not signed in can still see what the device is set to.
@@ -97,7 +112,7 @@
        The panel is yours - a sibling device has different settings - but
        #changePassButton and #saveState are the shell's, and core.js wires them
        wherever you put them. -->
-  <section class="panel" id="settingsPanel">
+  <section class="panel" id="settingsPanel" data-pane="settings" role="tabpanel">
     <h2 id="settingsTitle">Settings</h2>
 
     <div class="field">
@@ -129,7 +144,7 @@
        wired to anything, and none of it belongs in a real device -
        delete this whole section first.
        =================================================================== -->
-  <section class="panel" id="componentsPanel">
+  <section class="panel" id="componentsPanel" data-pane="components" role="tabpanel">
     <h2 id="componentsTitle">Components <span class="tag">demo</span></h2>
     <p class="modal__text" id="componentsText"></p>
 
@@ -210,7 +225,7 @@
        it is not what somebody came here to do. Leave the section out entirely
        on a device that should not be updated from a browser - core.js drives
        whatever markup is present and never assumes any of it. -->
-  <section class="panel" id="firmwarePanel">
+  <section class="panel" id="firmwarePanel" data-pane="settings">
     <h2 id="firmwareTitle">Firmware update</h2>
     <p class="hint" id="firmwareText"></p>
 
@@ -230,7 +245,7 @@
     </div>
   </section>
 
-  <section class="panel panel--danger" id="dangerPanel">
+  <section class="panel panel--danger" id="dangerPanel" data-pane="settings">
     <h2 id="dangerTitle">Factory reset</h2>
     <p class="hint" id="dangerText"></p>
     <div class="actions">
@@ -350,6 +365,7 @@
    */
   HCore.addStrings({
     en: {
+      tabDashboard: 'Dashboard', tabSettings: 'Settings', tabComponents: 'Components',
       hello: 'Hello, world',
       helloText: 'This page is served by the device itself. Nothing is fetched ' +
                  'from the internet - there is no route to one.',
@@ -361,6 +377,7 @@
       componentsText: 'Every class core.css offers. Delete this panel first.'
     },
     uk: {
+      tabDashboard: 'Панель', tabSettings: 'Налаштування', tabComponents: 'Компоненти',
       hello: 'Привіт, світ',
       helloText: 'Цю сторінку віддає сам пристрій. Нічого не завантажується з ' +
                  'інтернету - до нього немає маршруту.',
@@ -574,13 +591,20 @@
     // unit for one frame.
     loadConfig()
       .then(HCore.checkAuth)
-      .then(function () { return loadValues(true); })
+      // Only when the dashboard is what is on screen: landing on another tab -
+      // from a reload, or a link - has no reason to fetch readings nobody is
+      // looking at, and the poll above fetches one the moment it is shown.
+      .then(function () { return HCore.tab() === 'dashboard' ? loadValues(true) : null; })
       .then(HCore.loadInfo);
 
-    // The page's ONE recurring request, stopped while the tab is hidden. One,
-    // not many: the device serving this page is an access point running off a
-    // battery, and every timer you forget to cancel is paid for in milliamps.
-    HCore.poll(function () { loadValues(false); }, VALUES_POLL_MS);
+    // The page's ONE recurring request, stopped while the browser tab is hidden
+    // AND while a tab other than the dashboard is showing. One timer, not many:
+    // the device serving this page is an access point running off a battery,
+    // and every request nobody will read is paid for in milliamps.
+    //
+    // Switching back to the dashboard fetches immediately, so the cards are
+    // never left showing a number ten seconds old.
+    HCore.poll(function () { loadValues(false); }, VALUES_POLL_MS, 'dashboard');
   }
 
   document.addEventListener('DOMContentLoaded', function () {
