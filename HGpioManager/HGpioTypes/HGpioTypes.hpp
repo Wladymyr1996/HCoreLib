@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+
 /**
  * @file HGpioTypes.hpp
  * @brief How a pin is declared. Shared by the board table and every backend.
@@ -51,4 +52,5 @@ struct HGpioPinDesc {
    * that way. Applied in both directions, reads and writes alike.
    */
   bool invert = false;
+
 };

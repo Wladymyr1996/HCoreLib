@@ -55,6 +55,7 @@ class HGpioPin {
   /** @brief True if the pin was declared as an output. */
   bool isOutput() const noexcept;
 
+
   /**
    * @brief True when the pin's logical `true` is the pad's LOW level.
    *
