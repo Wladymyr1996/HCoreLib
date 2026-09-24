@@ -6,7 +6,27 @@
 #if IS_MCU
 
 #include <driver/rtc_io.h>
+#include <esp_idf_version.h>
 #include <esp_sleep.h>
+
+// ESP-IDF v6.0 renamed esp_deep_sleep_enable_gpio_wakeup() to
+// esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown() (same parameters,
+// same behaviour - it explicitly covers deep sleep, see its doc comment) and
+// renamed esp_deepsleep_gpio_wake_up_mode_t to esp_sleep_gpio_wake_up_mode_t.
+// The two names are aliased here, once, so enableButtonWakeup() below does not
+// have to carry a version check of its own - and so it keeps building against
+// whichever ESP-IDF a device on this chip's family happens to be pinned to.
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+using HSleepGpioWakeMode = esp_sleep_gpio_wake_up_mode_t;
+inline esp_err_t hsleepEnableGpioWakeup(uint64_t gpioPinMask, HSleepGpioWakeMode mode) {
+  return esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(gpioPinMask, mode);
+}
+#else
+using HSleepGpioWakeMode = esp_deepsleep_gpio_wake_up_mode_t;
+inline esp_err_t hsleepEnableGpioWakeup(uint64_t gpioPinMask, HSleepGpioWakeMode mode) {
+  return esp_deep_sleep_enable_gpio_wakeup(gpioPinMask, mode);
+}
+#endif
 
 #else
 
@@ -111,7 +131,7 @@ bool HSleep::enableButtonWakeup(const HGpioPin& pin) noexcept {
   rtc_gpio_pullup_dis(number);
   rtc_gpio_pulldown_dis(number);
 
-  esp_deepsleep_gpio_wake_up_mode_t mode = ESP_GPIO_WAKEUP_GPIO_HIGH;
+  HSleepGpioWakeMode mode = ESP_GPIO_WAKEUP_GPIO_HIGH;
   if (pin.isActiveLow()) {
     // Switch to ground: hold the pad HIGH so that only the press pulls it down.
     rtc_gpio_pullup_en(number);
@@ -120,7 +140,7 @@ bool HSleep::enableButtonWakeup(const HGpioPin& pin) noexcept {
     rtc_gpio_pulldown_en(number);
   }
 
-  const esp_err_t result = esp_deep_sleep_enable_gpio_wakeup(1ULL << pin.number(), mode);
+  const esp_err_t result = hsleepEnableGpioWakeup(1ULL << pin.number(), mode);
   if (result != ESP_OK) {
     HCritical("GPIO%d wakeup rejected: %s", pin.number(), esp_err_to_name(result));
     return false;
