@@ -34,6 +34,7 @@ boundary / control / entity: [Docs/ClassDiagram.puml](Docs/ClassDiagram.puml).
 | `HFs` | filesystem behind one interface — LittleFS on target, real files on host |
 | `HGpioManager` | pins by NAME, with inversion applied at the pin edge |
 | `HButton` | debounce, press / long-press / release, on a logical pin |
+| `HStatusLed` | the family's standard status patterns on an on-board RGB LED; off unless `HSTATUSLED_ENABLE` — see its [README](HStatusLed/README.md) |
 | `HTimer` | one-shot timeouts against an absolute, wrap-safe clock |
 | `HTask` | a FreeRTOS task as an object, with watchdog enrolment built in |
 | `HTaskManager` | liveness watchdog: a task that stops reporting restarts the device cold |
@@ -119,8 +120,8 @@ device runs, not a reimplementation of it.
 its own, covering every module the host build compiles — `HValue`, `HJson`,
 `HConfig` (paths, the on-disk format, patching, crash recovery), `HLog`,
 `HSha256` against the published vectors, `HTimer`, `HHookList`, `HFs`,
-`HGpioManager`, `HButton` through a synthetic bounce train, `HRtcStore` and
-`HAuth`.
+`HGpioManager`, `HButton` through a synthetic bounce train, `HRtcStore`,
+`HAuth`, and `HStatusLed`'s patterns to the millisecond on a recording LED.
 
 ```
 cmake -S Tests -B build-tests

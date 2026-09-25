@@ -28,3 +28,13 @@
  * without the build saying why.
  */
 #define HVALUE_MAX_STRING_LEN 64
+
+/**
+ * The status LED, ON here although the library ships it off.
+ *
+ * At 0 HStatusLed is a set of inline no-ops, and the suite would test nothing
+ * but that they compile. At 1 the host build drives HRgbLedDesktop, so the
+ * patterns run as the device runs them. HStatusLedTest.cpp static_asserts on
+ * this.
+ */
+#define HSTATUSLED_ENABLE 1

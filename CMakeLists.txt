@@ -38,6 +38,11 @@ set(HCORELIB_SRCS
     "HOtaImage/HOtaImage.cpp"
     "HRtcStore/HRtcStore.cpp"
     "HSleep/HSleep.cpp"
+    # The status LED's patterns are platform-independent; which backend drives
+    # the LED is chosen below. Everything compiles to nothing unless the
+    # application sets HSTATUSLED_ENABLE - see HStatusLed.hpp.
+    "HStatusLed/HStatusLed.cpp"
+    "HStatusLed/HIRgbLed/HIRgbLed.cpp"
     "HLog/HLog.cpp"
     "HLog/HILogBackend/HILogBackend.cpp"
     "HLog/HConsoleLogBackend/HConsoleLogBackend.cpp"
@@ -59,6 +64,7 @@ if(ESP_PLATFORM)
        "HFs/LittleFs/HLittleFsFile.cpp"
        "HGpioManager/HGpioEsp32/HGpioEsp32.cpp"
        "HAdcManager/HAdcEsp32/HAdcEsp32.cpp"
+       "HStatusLed/HRgbLedEsp32/HRgbLedEsp32.cpp"
        # HTask wraps a FreeRTOS task, which the host has no equivalent of.
        "HTask/HTask.cpp"
        "HTaskManager/HTaskManager.cpp")
@@ -67,7 +73,8 @@ else()
        "HFs/Desktop/HFsDesktop.cpp"
        "HFs/Desktop/HFsDesktopFile.cpp"
        "HGpioManager/HGpioDesktop/HGpioDesktop.cpp"
-       "HAdcManager/HAdcDesktop/HAdcDesktop.cpp")
+       "HAdcManager/HAdcDesktop/HAdcDesktop.cpp"
+       "HStatusLed/HRgbLedDesktop/HRgbLedDesktop.cpp")
 endif()
 
 # "." serves the root <HCoreLib.h> as well as <HLog/HLog.hpp>,
@@ -148,8 +155,10 @@ if(ESP_PLATFORM)
                          REQUIRES freertos
                          # Private: esp_timer for the millisecond clock,
                          # esp_system only for esp_restart(), esp_driver_gpio
-                         # for the pads.
-                         PRIV_REQUIRES esp_timer esp_system esp_driver_gpio esp_adc)
+                         # for the pads, esp_driver_rmt for the status LED -
+                         # which links nothing unless HSTATUSLED_ENABLE is 1.
+                         PRIV_REQUIRES esp_timer esp_system esp_driver_gpio esp_adc
+                                       esp_driver_rmt)
 
   target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
 

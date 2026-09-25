@@ -196,6 +196,7 @@ int main() {
   runAuthTests();
   runOtaImageTests();
   runAdcTests();
+  runStatusLedTests();
 
   return HCoreLibTest::report();
 }

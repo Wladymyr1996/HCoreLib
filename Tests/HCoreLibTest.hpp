@@ -100,3 +100,4 @@ void runRtcStoreTests() noexcept;
 void runAuthTests() noexcept;
 void runOtaImageTests() noexcept;
 void runAdcTests() noexcept;
+void runStatusLedTests() noexcept;
