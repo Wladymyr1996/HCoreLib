@@ -40,8 +40,12 @@ constexpr HStatusLedPattern kConfiguring = {kYellow, kBlipMs, kBlipGapMs};
 constexpr HStatusLedPattern kFactoryReset = {kYellow, 50, 50};
 
 // Long on, short off: the only pattern that is mostly LIT, so it cannot be
-// mistaken for a heartbeat at a glance - and red, which nothing else uses.
+// mistaken for a heartbeat at a glance.
 constexpr HStatusLedPattern kFailed = {kRed, 1000, 500};
+
+// The heartbeat, red: running, but not all is well. A blip, never mostly lit,
+// so it is not Failed.
+constexpr HStatusLedPattern kDegraded = {kRed, kBlipMs, kBlipGapMs};
 
 constexpr HStatusLedPattern kBindSlave = {kYellow, 200, 200};
 constexpr HStatusLedPattern kBindMaster = {kYellow, 1, 0};  // off 0: solid
@@ -160,6 +164,8 @@ const HStatusLedPattern& HStatusLed::pattern(HStatusLedBase base) noexcept {
       return kFactoryReset;
     case HStatusLedBase::Failed:
       return kFailed;
+    case HStatusLedBase::Degraded:
+      return kDegraded;
     case HStatusLedBase::None:
       break;
   }

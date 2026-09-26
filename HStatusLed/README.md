@@ -13,10 +13,16 @@ patterns that mean the same thing on every device.
 | Settings mode | `setBase(Configuring)` | yellow | 50 ms on / 2 s off |
 | Factory reset | `setBase(FactoryReset)` | yellow | 50 ms on / 50 ms off |
 | Failed | `setBase(Failed)` | red | 1 s on / 0.5 s off |
+| Degraded | `setBase(Degraded)` | red | 50 ms on / 2 s off |
 
 **Failed** means something the device needs did not start - the filesystem, the
 radio, the portal. It is a base, so it replaces the mode's blink for the rest of
 that boot; the log says what failed.
+
+**Degraded** is Normal's heartbeat in red: the device runs, but something it
+runs is not as configured - a relay controller with a relay on its failsafe,
+say. The application switches between Normal and Degraded as it changes; it
+never replaces Failed.
 
 Defined once, in `HStatusLed.cpp`. A device picks which statuses it sets; it
 does not invent its own meaning for a colour. Every cycle starts **lit**, so a

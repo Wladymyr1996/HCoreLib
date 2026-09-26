@@ -51,6 +51,11 @@ void testTheTableIsTheFamilyStandard() noexcept {
   CHECK(!HStatusLed::isLit(failed, 1499));
   CHECK(HStatusLed::isLit(failed, 1500));
 
+  // Normal's heartbeat, in Failed's colour.
+  const HStatusLedPattern& degraded = HStatusLed::pattern(HStatusLedBase::Degraded);
+  CHECK(degraded.onMs == normal.onMs && degraded.offMs == normal.offMs);
+  CHECK(degraded.color == failed.color);
+
   const HStatusLedPattern& slave = HStatusLed::pattern(HStatusLedOverlay::BindSlave);
   CHECK(slave.onMs == 200 && slave.offMs == 200);
   CHECK(slave.color == configuring.color);

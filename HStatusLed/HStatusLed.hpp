@@ -52,6 +52,14 @@ enum class HStatusLedBase : uint8_t {
   Configuring,   ///< Yellow, 50 ms every 2 s.
   FactoryReset,  ///< Yellow, 50 ms on / 50 ms off.
   Failed,        ///< Red, 1 s on / 0.5 s off. Something the device needs did not start.
+
+  /**
+   * Red, 50 ms every 2 s: Normal mode's heartbeat, in red. The device runs, but
+   * something it runs is not as configured - a relay controller with a relay
+   * on its failsafe because the logic driving it went silent. Appended, so no
+   * existing value moves.
+   */
+  Degraded,
 };
 
 /**
